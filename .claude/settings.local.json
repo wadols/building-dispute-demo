@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"c:\\\\Users\\\\USER\\\\Desktop\\\\클로드코드\")",
+      "Read(//c/Users/USER/Desktop/클로드코드/**)"
+    ]
+  }
+}
