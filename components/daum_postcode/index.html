@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #fff; }
+    body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; }
+    #layer { width: 100%; height: 460px; }
+  </style>
+</head>
+<body>
+  <div id="layer"></div>
+
+  <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+  <script>
+    /* Streamlit 부모 프레임과 통신하는 헬퍼 */
+    function toStreamlit(type, extra) {
+      window.parent.postMessage(
+        Object.assign({ isStreamlitMessage: true, type: type }, extra || {}),
+        "*"
+      );
+    }
+
+    /* ① 컴포넌트 준비 알림 */
+    toStreamlit("streamlit:componentReady", { apiVersion: 1 });
+
+    /* ② 프레임 높이를 Streamlit 에 알림 (여러 시점에 반복 전송해 확실히 적용) */
+    function setH() { toStreamlit("streamlit:setFrameHeight", { height: 460 }); }
+    setH();
+    document.addEventListener("DOMContentLoaded", setH);
+    window.addEventListener("load", setH);
+    setTimeout(setH, 200);
+    setTimeout(setH, 600);
+
+    /* ③ Daum 주소 검색 임베드 */
+    new daum.Postcode({
+      width:  "100%",
+      height: "460px",
+      oncomplete: function(data) {
+        var addr = data.roadAddress || data.jibunAddress;
+        if (data.buildingName) addr += " (" + data.buildingName + ")";
+        toStreamlit("streamlit:setComponentValue", {
+          value: { postcode: data.zonecode, address: addr }
+        });
+      }
+    }).embed(document.getElementById("layer"), { autoClose: false });
+  </script>
+</body>
+</html>

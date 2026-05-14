@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(ls \"c:\\\\Users\\\\USER\\\\Desktop\\\\클로드코드\")",
-      "Read(//c/Users/USER/Desktop/클로드코드/**)"
+      "Read(//c/Users/USER/Desktop/클로드코드/**)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\USER\\\\Desktop\\\\Ŭ�ε��ڵ�\\\\���հǹ�������������ȸ ���� �ڵ�ȭ\\\\components\\\\daum_postcode\")",
+      "Bash(python -m py_compile pages/4_사건상세.py)",
+      "Bash(python -m py_compile pages/3_접수대장.py)",
+      "Bash(python -m py_compile core/hwpx_handler.py)",
+      "Bash(python -c ' *)",
+      "Bash(pip install *)",
+      "PowerShell(python -m pip install xlrd -q)",
+      "Bash(python -m py_compile core/excel_handler.py)",
+      "Bash(python -m py_compile pages/5_위원관리.py)",
+      "Bash(python -m py_compile pages/6_위원회개최.py)",
+      "Bash(python -m py_compile pages/2_신규접수.py)",
+      "Bash(python -c \"import streamlit; print\\(streamlit.__version__\\)\")",
+      "Bash(python -m py_compile app.py)",
+      "Bash(python -m py_compile app.py pages/1_홈.py pages/4_사건상세.py)"
     ]
   }
 }

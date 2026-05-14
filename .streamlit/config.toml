@@ -1,0 +1,15 @@
+[theme]
+base            = "light"
+primaryColor    = "#1A56A0"        # 경기도 공식 블루
+backgroundColor = "#F0F4F8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor       = "#1E293B"
+font            = "sans serif"
+
+[server]
+headless        = false
+port            = 8501
+enableCORS      = false
+
+[browser]
+gatherUsageStats = false
