@@ -86,16 +86,17 @@ CREATE TABLE IF NOT EXISTS case_notes (
 
 CREATE_COMMITTEE_MEMBERS = """
 CREATE TABLE IF NOT EXISTS committee_members (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    성명        TEXT NOT NULL,
-    소속        TEXT,
-    직위        TEXT,
-    핸드폰번호  TEXT,
-    생년월일    DATE,
-    은행명      TEXT,
-    계좌번호    TEXT,
-    활성여부    BOOLEAN DEFAULT 1,
-    생성일시    DATETIME NOT NULL DEFAULT (datetime('now','localtime'))
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    성명              TEXT NOT NULL,
+    소속              TEXT,
+    직위              TEXT,
+    핸드폰번호        TEXT,
+    생년월일          DATE,
+    은행명            TEXT,
+    계좌번호          TEXT,
+    "최종학력 및 경력" TEXT,
+    활성여부          BOOLEAN DEFAULT 1,
+    생성일시          DATETIME NOT NULL DEFAULT (datetime('now','localtime'))
 )
 """
 
@@ -167,14 +168,18 @@ def init_db():
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """기존 DB에 누락된 컬럼을 추가한다 (ALTER TABLE ADD COLUMN은 멱등)."""
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(cases)")}
-    additions = {
+    existing_cases = {row[1] for row in conn.execute("PRAGMA table_info(cases)")}
+    cases_additions = {
         "건물명":      "ALTER TABLE cases ADD COLUMN 건물명 TEXT",
         "신청인_지위": "ALTER TABLE cases ADD COLUMN 신청인_지위 TEXT",
     }
-    for col, sql in additions.items():
-        if col not in existing:
+    for col, sql in cases_additions.items():
+        if col not in existing_cases:
             conn.execute(sql)
+
+    existing_members = {row[1] for row in conn.execute("PRAGMA table_info(committee_members)")}
+    if "최종학력 및 경력" not in existing_members:
+        conn.execute('ALTER TABLE committee_members ADD COLUMN "최종학력 및 경력" TEXT')
 
 
 # ────────────────────────────────────────────────
@@ -182,7 +187,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
 # ────────────────────────────────────────────────
 
 def create_case(data: dict) -> int:
-    cols = ", ".join(data.keys())
+    cols = ", ".join(f'"{k}"' for k in data.keys())
     placeholders = ", ".join("?" * len(data))
     sql = f"INSERT INTO cases ({cols}) VALUES ({placeholders})"
     with conn_ctx() as conn:
@@ -212,7 +217,7 @@ def get_all_cases(year: int | None = None, status: str | None = None) -> list[sq
 def update_case(접수번호: str, data: dict) -> None:
     if not data:
         return
-    sets = ", ".join(f"{k} = ?" for k in data)
+    sets = ", ".join(f'"{k}" = ?' for k in data)
     sql = f"UPDATE cases SET {sets} WHERE 접수번호 = ?"
     with conn_ctx() as conn:
         conn.execute(sql, list(data.values()) + [접수번호])
@@ -245,7 +250,7 @@ def get_cases_by_period(
 # ────────────────────────────────────────────────
 
 def create_note(data: dict) -> int:
-    cols = ", ".join(data.keys())
+    cols = ", ".join(f'"{k}"' for k in data.keys())
     placeholders = ", ".join("?" * len(data))
     sql = f"INSERT INTO case_notes ({cols}) VALUES ({placeholders})"
     with conn_ctx() as conn:
@@ -269,7 +274,7 @@ def get_note(note_id: int) -> sqlite3.Row | None:
 def update_note(note_id: int, data: dict) -> None:
     if not data:
         return
-    sets = ", ".join(f"{k} = ?" for k in data)
+    sets = ", ".join(f'"{k}" = ?' for k in data)
     sql = f"UPDATE case_notes SET {sets} WHERE id = ?"
     with conn_ctx() as conn:
         conn.execute(sql, list(data.values()) + [note_id])
@@ -302,7 +307,7 @@ def get_recent_notes(limit: int = 10) -> list[sqlite3.Row]:
 # ────────────────────────────────────────────────
 
 def create_member(data: dict) -> int:
-    cols = ", ".join(data.keys())
+    cols = ", ".join(f'"{k}"' for k in data.keys())
     placeholders = ", ".join("?" * len(data))
     sql = f"INSERT INTO committee_members ({cols}) VALUES ({placeholders})"
     with conn_ctx() as conn:
@@ -327,7 +332,7 @@ def get_all_members(active_only: bool = True) -> list[sqlite3.Row]:
 def update_member(member_id: int, data: dict) -> None:
     if not data:
         return
-    sets = ", ".join(f"{k} = ?" for k in data)
+    sets = ", ".join(f'"{k}" = ?' for k in data)
     sql = f"UPDATE committee_members SET {sets} WHERE id = ?"
     with conn_ctx() as conn:
         conn.execute(sql, list(data.values()) + [member_id])
@@ -343,7 +348,7 @@ def delete_member(member_id: int) -> None:
 # ────────────────────────────────────────────────
 
 def create_hearing(data: dict) -> int:
-    cols = ", ".join(data.keys())
+    cols = ", ".join(f'"{k}"' for k in data.keys())
     placeholders = ", ".join("?" * len(data))
     sql = f"INSERT INTO hearings ({cols}) VALUES ({placeholders})"
     with conn_ctx() as conn:
@@ -378,7 +383,7 @@ def get_all_hearings(year: int | None = None) -> list[sqlite3.Row]:
 def update_hearing(hearing_id: int, data: dict) -> None:
     if not data:
         return
-    sets = ", ".join(f"{k} = ?" for k in data)
+    sets = ", ".join(f'"{k}" = ?' for k in data)
     sql = f"UPDATE hearings SET {sets} WHERE id = ?"
     with conn_ctx() as conn:
         conn.execute(sql, list(data.values()) + [hearing_id])
@@ -406,7 +411,11 @@ def set_hearing_members(hearing_id: int, members: list[dict]) -> None:
 
 def get_hearing_members(hearing_id: int) -> list[sqlite3.Row]:
     sql = """
-        SELECT hm.*, cm.성명, cm.소속, cm.직위
+        SELECT hm.역할,
+               cm.id, cm.성명, cm.소속, cm.직위,
+               cm.핸드폰번호, cm.생년월일,
+               cm.은행명, cm.계좌번호,
+               cm."최종학력 및 경력"
         FROM hearing_members hm
         JOIN committee_members cm ON hm.member_id = cm.id
         WHERE hm.hearing_id = ?

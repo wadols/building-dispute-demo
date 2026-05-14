@@ -120,225 +120,435 @@ if mode == "신규 접수":
 else:
     page_header("✏️", f"사건 수정 — {existing['접수번호']}", existing.get("신청인_성명",""))
 
-# 신규 접수일 때 접수번호를 항상 최신으로 보정 (다른 탭에서 등록된 경우 대비)
-if mode == "신규 접수":
-    fresh_num = next_case_number(today.year)
-    # 현재 입력값이 자동 생성 패턴 그대로이면 최신 번호로 교체
-    cur_num = st.session_state.get("inp_접수번호", "")
-    import re
-    if re.fullmatch(r"\d{4}-\d{3,}", cur_num) and cur_num != fresh_num:
-        st.session_state["inp_접수번호"] = fresh_num
+# ── 탭
+tab_single, tab_bulk = st.tabs(["📋 단건 접수", "📥 엑셀 일괄 가져오기"])
 
-# ══════════════════════════════════════════════
-# ① 사건 기본 정보
-# ══════════════════════════════════════════════
-st.markdown('<div class="card"><div class="card-title">① 사건 기본 정보</div>', unsafe_allow_html=True)
-c1, c2, c3 = st.columns([2, 2, 2])
-with c1:
-    st.text_input("접수번호 *", key="inp_접수번호", help="자동 생성 — 필요시 수정 가능")
-with c2:
-    st.date_input("접수일자 *", key="inp_접수일자")
-with c3:
-    st.text_input("지역 *", key="inp_지역", placeholder="예: 수원시 영통구")
+# ══════════════════════════════════════════════════════════════
+# 탭 1: 단건 접수 (기존 폼)
+# ══════════════════════════════════════════════════════════════
+with tab_single:
 
-분쟁유형_opts = ["", "관리비", "하자", "소음·진동", "주차", "공용부분", "층간소음", "관리단 운영", "선거·의결", "기타"]
-c4, c5 = st.columns([2, 4])
-with c4:
-    st.selectbox("분쟁유형", 분쟁유형_opts, key="inp_분쟁유형")
-with c5:
-    st.text_area("신청내용", key="inp_신청내용", height=72)
-st.markdown('</div>', unsafe_allow_html=True)
+    # ── PDF 자동 입력 섹션
+    with st.expander("📄 신청서 PDF에서 자동 입력", expanded=False):
 
-# ══════════════════════════════════════════════
-# ② 건물 정보
-# ══════════════════════════════════════════════
-st.markdown('<div class="card"><div class="card-title">② 건물 정보</div>', unsafe_allow_html=True)
-b1, b2, b3 = st.columns([2, 3, 2])
-용도_opts = ["", "아파트", "연립주택", "다세대주택", "오피스텔", "상가", "복합건물", "기타"]
-with b1:
-    st.text_input("건물명", key="inp_건물명", placeholder="예: 행복아파트")
-with b2:
-    st.text_input("건물소재지", key="inp_건물소재지")
-with b3:
-    st.selectbox("건축물용도", 용도_opts, key="inp_건축물용도")
-st.markdown('</div>', unsafe_allow_html=True)
+        # rerun 후에도 결과 메시지 유지
+        _pdf_msg = st.session_state.pop("_pdf_msg", None)
+        if _pdf_msg:
+            if _pdf_msg.get("filled"):
+                st.success(f"✅ 자동 입력 완료: {', '.join(_pdf_msg['filled'])}")
+            if _pdf_msg.get("skipped"):
+                st.info(f"직접 입력 필요: {', '.join(_pdf_msg['skipped'])}")
+            if _pdf_msg.get("error"):
+                st.error(_pdf_msg["error"])
+            if _pdf_msg.get("raw"):
+                with st.expander("추출 원문 확인 (파싱이 안 될 때 참고)"):
+                    st.text(_pdf_msg["raw"][:3000])
 
-# ══════════════════════════════════════════════
-# ③ 신청인 / ④ 피신청인 (2열)
-# ══════════════════════════════════════════════
-col_ap, col_rp = st.columns(2)
+        pdf_file = st.file_uploader(
+            "신청서 PDF 업로드 (집합건물 분쟁조정 신청서)",
+            type=["pdf"], key="pdf_upload",
+            label_visibility="collapsed",
+        )
+        if pdf_file:
+            if st.button("🔍 자동 추출 시작", key="pdf_parse_btn", type="primary"):
+                msg = {}
+                try:
+                    from core.pdf_parser import parse_application_pdf, FIELD_LABELS
+                    parsed, raw_text = parse_application_pdf(pdf_file.read())
+                    msg["raw"] = raw_text
 
-# ── 신청인
-with col_ap:
-    st.markdown('<div class="card"><div class="card-title">③ 신청인 정보</div>', unsafe_allow_html=True)
-    st.text_input("성명 *", key="inp_신청인_성명")
-    st.text_input("지위", key="inp_신청인_지위", placeholder="예: 구분소유자, 임차인 등 자유 입력")
-    st.text_input("연락처", key="inp_신청인_연락처", placeholder="010-0000-0000")
+                    if "_error" in parsed:
+                        msg["error"] = f"파싱 오류: {parsed['_error']}"
+                    else:
+                        field_map = {
+                            "신청인_성명":    "inp_신청인_성명",
+                            "신청인_주소":    "inp_신청인_주소",
+                            "신청인_연락처":  "inp_신청인_연락처",
+                            "피신청인_성명":  "inp_피신청인_성명",
+                            "피신청인_주소":  "inp_피신청인_주소",
+                            "피신청인_연락처":"inp_피신청인_연락처",
+                            "지역":           "inp_지역",
+                            "건물소재지":     "inp_건물소재지",
+                            "신청내용":       "inp_신청내용",
+                        }
+                        filled, skipped = [], []
+                        for src, dst in field_map.items():
+                            if parsed.get(src):
+                                st.session_state[dst] = parsed[src]
+                                filled.append(FIELD_LABELS.get(src, src))
+                            else:
+                                skipped.append(FIELD_LABELS.get(src, src))
 
-    # 주소 검색 버튼
-    if st.button("🔍 주소 검색 (다음)", key="btn_ap_search", use_container_width=True):
-        st.session_state["show_ap_search"] = not st.session_state.get("show_ap_search", False)
+                        if parsed.get("접수일자"):
+                            try:
+                                st.session_state["inp_접수일자"] = date.fromisoformat(parsed["접수일자"])
+                                filled.append("접수일자")
+                            except Exception:
+                                pass
 
-    # 주소 검색 위젯 (버튼 클릭 시 토글)
-    if st.session_state.get("show_ap_search", False):
-        ap_result = address_search_widget(key="ap_addr_search")
-        apply_addr(ap_result,
-                   addr_key="inp_신청인_주소", zip_key="inp_신청인_우편번호",
-                   show_key="show_ap_search")
+                        if not raw_text.strip():
+                            msg["error"] = "PDF에서 텍스트를 읽지 못했습니다. 스캔 이미지 PDF이거나 보안이 걸린 파일일 수 있습니다."
+                        elif not filled:
+                            msg["error"] = "텍스트는 읽었으나 항목을 추출하지 못했습니다. '추출 원문 확인'으로 내용을 확인하세요."
+                        msg["filled"] = filled
+                        msg["skipped"] = skipped
 
-    st.text_input("주소 *", key="inp_신청인_주소")
-    st.text_input("우편번호", key="inp_신청인_우편번호", max_chars=6)
-    st.markdown('</div>', unsafe_allow_html=True)
+                except ImportError:
+                    msg["error"] = "pdfplumber가 필요합니다. 터미널에서: pip install pdfplumber"
+                except Exception as e:
+                    msg["error"] = f"오류: {e}"
 
-# ── 피신청인
-with col_rp:
-    st.markdown('<div class="card"><div class="card-title">④ 피신청인 정보</div>', unsafe_allow_html=True)
-    st.text_input("성명 *", key="inp_피신청인_성명")
-    st.text_input("지위", key="inp_피신청인_지위", placeholder="예: 관리단, 입주자대표회의 등 자유 입력")
-    st.text_input("연락처", key="inp_피신청인_연락처", placeholder="010-0000-0000")
-
-    if st.button("🔍 주소 검색 (다음)", key="btn_rp_search", use_container_width=True):
-        st.session_state["show_rp_search"] = not st.session_state.get("show_rp_search", False)
-
-    if st.session_state.get("show_rp_search", False):
-        rp_result = address_search_widget(key="rp_addr_search")
-        apply_addr(rp_result,
-                   addr_key="inp_피신청인_주소", zip_key="inp_피신청인_우편번호",
-                   show_key="show_rp_search")
-
-    st.text_input("주소 *", key="inp_피신청인_주소")
-    st.text_input("우편번호", key="inp_피신청인_우편번호", max_chars=6)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════
-# ⑤ 진행 정보
-# ══════════════════════════════════════════════
-st.markdown('<div class="card"><div class="card-title">⑤ 진행 정보</div>', unsafe_allow_html=True)
-
-d1, d2, d3 = st.columns([2, 1, 2])
-with d1:
-    st.date_input("안내도달일", key="inp_안내도달일")
-with d2:
-    deadline_days = st.number_input("회신기한 (일)", min_value=1, max_value=60, value=14)
-with d3:
-    # 안내도달일 변경 시 회신기한 자동 계산
-    안내도달일_val = st.session_state.get("inp_안내도달일")
-    if isinstance(안내도달일_val, date):
-        auto_dl = 안내도달일_val + timedelta(days=int(deadline_days))
-        if st.session_state.get("inp_회신기한") != auto_dl:
-            st.session_state["inp_회신기한"] = auto_dl
-    st.date_input("회신기한 ✦자동", key="inp_회신기한")
-
-d4, d5, d6, d7 = st.columns(4)
-with d4:
-    st.date_input("회신접수일", key="inp_회신접수일")
-with d5:
-    st.selectbox("조정동의여부", ["", "동의", "부동의", "무응답"], key="inp_조정동의여부")
-with d6:
-    st.selectbox("개최여부", ["", "개최", "불개시"], key="inp_개최여부")
-with d7:
-    st.selectbox("결과", ["", "조정성립", "조정불성립", "조정중지", "종결"], key="inp_결과")
-
-st.date_input("종결일자", key="inp_종결일자")
-st.markdown('</div>', unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════
-# 저장 버튼
-# ══════════════════════════════════════════════
-st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-submitted = st.button(
-    "✅  저장 완료" if mode == "신규 접수" else "💾  수정 저장",
-    use_container_width=True,
-    type="primary",
-)
-
-if submitted:
-    def gs(k):      return st.session_state.get(k)
-    def gss(k):
-        v = gs(k)
-        return v.strip() if isinstance(v, str) else (str(v).strip() if v else "")
-    def gsd(k):
-        v = gs(k)
-        return v.isoformat() if isinstance(v, date) else None
-    def opt(v):     return v or None
-
-    # 필수 검증
-    errs = []
-    if not gss("inp_접수번호"):     errs.append("접수번호를 입력하세요.")
-    if not gss("inp_지역"):         errs.append("지역을 입력하세요.")
-    if not gss("inp_신청인_성명"):  errs.append("신청인 성명을 입력하세요.")
-    if not gss("inp_신청인_주소"):  errs.append("신청인 주소를 입력하세요.")
-    if not gss("inp_피신청인_성명"):errs.append("피신청인 성명을 입력하세요.")
-    if not gss("inp_피신청인_주소"):errs.append("피신청인 주소를 입력하세요.")
-    if errs:
-        for e in errs:
-            st.error(e)
-        st.stop()
-
-    번호 = gss("inp_접수번호")
-    접수일자_v = gs("inp_접수일자")
-    if not isinstance(접수일자_v, date):
-        st.error("접수일자를 선택하세요.")
-        st.stop()
-
-    if mode == "신규 접수" and case_exists(번호):
-        st.error(f"**{번호}** 는 이미 존재합니다. '기존 사건 수정' 모드를 사용하세요.")
-        st.stop()
-
-    data = {
-        "접수연도":          접수일자_v.year,
-        "접수번호":          번호,
-        "지역":              gss("inp_지역"),
-        "신청인_성명":       gss("inp_신청인_성명"),
-        "신청인_주소":       gss("inp_신청인_주소"),
-        "신청인_우편번호":   opt(gss("inp_신청인_우편번호")),
-        "신청인_연락처":     opt(gss("inp_신청인_연락처")),
-        "신청인_지위":       opt(gss("inp_신청인_지위")),
-        "피신청인_성명":     gss("inp_피신청인_성명"),
-        "피신청인_주소":     gss("inp_피신청인_주소"),
-        "피신청인_우편번호": opt(gss("inp_피신청인_우편번호")),
-        "피신청인_연락처":   opt(gss("inp_피신청인_연락처")),
-        "피신청인_지위":     opt(gss("inp_피신청인_지위")),
-        "건물명":            opt(gss("inp_건물명")),
-        "건물소재지":        opt(gss("inp_건물소재지")),
-        "건축물용도":        opt(gs("inp_건축물용도") or None),
-        "신청내용":          opt(gss("inp_신청내용")),
-        "접수일자":          접수일자_v.isoformat(),
-        "안내도달일":        gsd("inp_안내도달일"),
-        "회신기한":          gsd("inp_회신기한"),
-        "회신접수일":        gsd("inp_회신접수일"),
-        "조정동의여부":      opt(gs("inp_조정동의여부") or None),
-        "개최여부":          opt(gs("inp_개최여부") or None),
-        "결과":              opt(gs("inp_결과") or None),
-        "종결일자":          gsd("inp_종결일자"),
-        "분쟁유형":          opt(gs("inp_분쟁유형") or None),
-    }
-    data["진행상태"] = resolve_status(data)
-
-    try:
-        if mode == "신규 접수":
-            create_case(data)
-            folder = OUTPUT_ROOT / 번호
-            folder.mkdir(parents=True, exist_ok=True)
-            st.toast(f"✅ {번호} 접수 완료! (진행상태: {data['진행상태']})", icon="✅")
-            # ── 폼 완전 초기화 → 다음 접수번호 자동 반영
-            for k in [k for k in list(st.session_state) if k.startswith("inp_") or k == _init_key]:
-                del st.session_state[k]
-            st.rerun()
+                st.session_state["_pdf_msg"] = msg
+                st.rerun()
         else:
-            data.pop("접수번호", None)
-            update_case(번호, data)
-            badge = status_badge(data["진행상태"])
-            st.success(f"**{번호}** 수정 완료!")
-            st.markdown(f"진행상태: {badge}", unsafe_allow_html=True)
-            st.session_state.pop("_active_edit", None)
-    except Exception as e:
-        st.error(f"저장 오류: {e}")
+            st.caption("신청인이 제출한 '집합건물 분쟁조정 신청서' PDF를 업로드하면 성명·주소·연락처·신청내용 등을 자동으로 입력합니다.")
 
-st.markdown(
-    '<p style="font-size:0.8rem;color:#94A3B8;margin-top:12px;">'
-    '✦ 주소 검색 버튼 클릭 → 다음 주소창 → 선택 시 자동 입력됩니다. &nbsp;'
-    '✦ 회신기한은 안내도달일 + 설정 일수로 자동 계산됩니다.'
-    '</p>',
-    unsafe_allow_html=True,
-)
+    st.markdown("")
+
+    # 신규 접수일 때 접수번호를 항상 최신으로 보정 (다른 탭에서 등록된 경우 대비)
+    if mode == "신규 접수":
+        fresh_num = next_case_number(today.year)
+        cur_num = st.session_state.get("inp_접수번호", "")
+        import re
+        if re.fullmatch(r"\d{4}-\d{3,}", cur_num) and cur_num != fresh_num:
+            st.session_state["inp_접수번호"] = fresh_num
+
+    # ══════════════════════════════════════════════
+    # ① 사건 기본 정보
+    # ══════════════════════════════════════════════
+    st.markdown('<div class="card"><div class="card-title">① 사건 기본 정보</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([2, 2, 2])
+    with c1:
+        st.text_input("접수번호 *", key="inp_접수번호", help="자동 생성 — 필요시 수정 가능")
+    with c2:
+        st.date_input("접수일자 *", key="inp_접수일자")
+    with c3:
+        st.text_input("지역 *", key="inp_지역", placeholder="예: 수원시 영통구")
+
+    분쟁유형_opts = ["", "관리비", "하자", "소음·진동", "주차", "공용부분", "층간소음", "관리단 운영", "선거·의결", "기타"]
+    c4, c5 = st.columns([2, 4])
+    with c4:
+        st.selectbox("분쟁유형", 분쟁유형_opts, key="inp_분쟁유형")
+    with c5:
+        st.text_area("신청내용", key="inp_신청내용", height=72)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════
+    # ② 건물 정보
+    # ══════════════════════════════════════════════
+    st.markdown('<div class="card"><div class="card-title">② 건물 정보</div>', unsafe_allow_html=True)
+    b1, b2, b3 = st.columns([2, 3, 2])
+    용도_opts = ["", "아파트", "연립주택", "다세대주택", "오피스텔", "상가", "복합건물", "기타"]
+    with b1:
+        st.text_input("건물명", key="inp_건물명", placeholder="예: 행복아파트")
+    with b2:
+        st.text_input("건물소재지", key="inp_건물소재지")
+    with b3:
+        st.selectbox("건축물용도", 용도_opts, key="inp_건축물용도")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════
+    # ③ 신청인 / ④ 피신청인 (2열)
+    # ══════════════════════════════════════════════
+    col_ap, col_rp = st.columns(2)
+
+    # ── 신청인
+    with col_ap:
+        st.markdown('<div class="card"><div class="card-title">③ 신청인 정보</div>', unsafe_allow_html=True)
+        st.text_input("성명 *", key="inp_신청인_성명")
+        st.text_input("지위", key="inp_신청인_지위", placeholder="예: 구분소유자, 임차인 등 자유 입력")
+        st.text_input("연락처", key="inp_신청인_연락처", placeholder="010-0000-0000")
+
+        # 주소 검색 버튼
+        if st.button("🔍 주소 검색 (다음)", key="btn_ap_search", use_container_width=True):
+            st.session_state["show_ap_search"] = not st.session_state.get("show_ap_search", False)
+
+        # 주소 검색 위젯 (버튼 클릭 시 토글)
+        if st.session_state.get("show_ap_search", False):
+            ap_result = address_search_widget(key="ap_addr_search")
+            apply_addr(ap_result,
+                       addr_key="inp_신청인_주소", zip_key="inp_신청인_우편번호",
+                       show_key="show_ap_search")
+
+        st.text_input("주소 *", key="inp_신청인_주소")
+        st.text_input("우편번호", key="inp_신청인_우편번호", max_chars=6)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── 피신청인
+    with col_rp:
+        st.markdown('<div class="card"><div class="card-title">④ 피신청인 정보</div>', unsafe_allow_html=True)
+        st.text_input("성명 *", key="inp_피신청인_성명")
+        st.text_input("지위", key="inp_피신청인_지위", placeholder="예: 관리단, 입주자대표회의 등 자유 입력")
+        st.text_input("연락처", key="inp_피신청인_연락처", placeholder="010-0000-0000")
+
+        if st.button("🔍 주소 검색 (다음)", key="btn_rp_search", use_container_width=True):
+            st.session_state["show_rp_search"] = not st.session_state.get("show_rp_search", False)
+
+        if st.session_state.get("show_rp_search", False):
+            rp_result = address_search_widget(key="rp_addr_search")
+            apply_addr(rp_result,
+                       addr_key="inp_피신청인_주소", zip_key="inp_피신청인_우편번호",
+                       show_key="show_rp_search")
+
+        st.text_input("주소 *", key="inp_피신청인_주소")
+        st.text_input("우편번호", key="inp_피신청인_우편번호", max_chars=6)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════
+    # ⑤ 진행 정보
+    # ══════════════════════════════════════════════
+    st.markdown('<div class="card"><div class="card-title">⑤ 진행 정보</div>', unsafe_allow_html=True)
+
+    d1, d2, d3 = st.columns([2, 1, 2])
+    with d1:
+        st.date_input("안내도달일", key="inp_안내도달일")
+    with d2:
+        deadline_days = st.number_input("회신기한 (일)", min_value=1, max_value=60, value=14)
+    with d3:
+        # 안내도달일 변경 시 회신기한 자동 계산
+        안내도달일_val = st.session_state.get("inp_안내도달일")
+        if isinstance(안내도달일_val, date):
+            auto_dl = 안내도달일_val + timedelta(days=int(deadline_days))
+            if st.session_state.get("inp_회신기한") != auto_dl:
+                st.session_state["inp_회신기한"] = auto_dl
+        st.date_input("회신기한 ✦자동", key="inp_회신기한")
+
+    d4, d5, d6, d7 = st.columns(4)
+    with d4:
+        st.date_input("회신접수일", key="inp_회신접수일")
+    with d5:
+        st.selectbox("조정동의여부", ["", "동의", "부동의", "무응답"], key="inp_조정동의여부")
+    with d6:
+        st.selectbox("개최여부", ["", "개최", "불개시"], key="inp_개최여부")
+    with d7:
+        st.selectbox("결과", ["", "조정성립", "조정불성립", "조정중지", "종결"], key="inp_결과")
+
+    st.date_input("종결일자", key="inp_종결일자")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════
+    # 저장 버튼
+    # ══════════════════════════════════════════════
+    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+    submitted = st.button(
+        "✅  저장 완료" if mode == "신규 접수" else "💾  수정 저장",
+        use_container_width=True,
+        type="primary",
+    )
+
+    if submitted:
+        def gs(k):      return st.session_state.get(k)
+        def gss(k):
+            v = gs(k)
+            return v.strip() if isinstance(v, str) else (str(v).strip() if v else "")
+        def gsd(k):
+            v = gs(k)
+            return v.isoformat() if isinstance(v, date) else None
+        def opt(v):     return v or None
+
+        # 필수 검증
+        errs = []
+        if not gss("inp_접수번호"):     errs.append("접수번호를 입력하세요.")
+        if not gss("inp_지역"):         errs.append("지역을 입력하세요.")
+        if not gss("inp_신청인_성명"):  errs.append("신청인 성명을 입력하세요.")
+        if not gss("inp_신청인_주소"):  errs.append("신청인 주소를 입력하세요.")
+        if not gss("inp_피신청인_성명"):errs.append("피신청인 성명을 입력하세요.")
+        if not gss("inp_피신청인_주소"):errs.append("피신청인 주소를 입력하세요.")
+        if errs:
+            for e in errs:
+                st.error(e)
+            st.stop()
+
+        번호 = gss("inp_접수번호")
+        접수일자_v = gs("inp_접수일자")
+        if not isinstance(접수일자_v, date):
+            st.error("접수일자를 선택하세요.")
+            st.stop()
+
+        if mode == "신규 접수" and case_exists(번호):
+            st.error(f"**{번호}** 는 이미 존재합니다. '기존 사건 수정' 모드를 사용하세요.")
+            st.stop()
+
+        data = {
+            "접수연도":          접수일자_v.year,
+            "접수번호":          번호,
+            "지역":              gss("inp_지역"),
+            "신청인_성명":       gss("inp_신청인_성명"),
+            "신청인_주소":       gss("inp_신청인_주소"),
+            "신청인_우편번호":   opt(gss("inp_신청인_우편번호")),
+            "신청인_연락처":     opt(gss("inp_신청인_연락처")),
+            "신청인_지위":       opt(gss("inp_신청인_지위")),
+            "피신청인_성명":     gss("inp_피신청인_성명"),
+            "피신청인_주소":     gss("inp_피신청인_주소"),
+            "피신청인_우편번호": opt(gss("inp_피신청인_우편번호")),
+            "피신청인_연락처":   opt(gss("inp_피신청인_연락처")),
+            "피신청인_지위":     opt(gss("inp_피신청인_지위")),
+            "건물명":            opt(gss("inp_건물명")),
+            "건물소재지":        opt(gss("inp_건물소재지")),
+            "건축물용도":        opt(gs("inp_건축물용도") or None),
+            "신청내용":          opt(gss("inp_신청내용")),
+            "접수일자":          접수일자_v.isoformat(),
+            "안내도달일":        gsd("inp_안내도달일"),
+            "회신기한":          gsd("inp_회신기한"),
+            "회신접수일":        gsd("inp_회신접수일"),
+            "조정동의여부":      opt(gs("inp_조정동의여부") or None),
+            "개최여부":          opt(gs("inp_개최여부") or None),
+            "결과":              opt(gs("inp_결과") or None),
+            "종결일자":          gsd("inp_종결일자"),
+            "분쟁유형":          opt(gs("inp_분쟁유형") or None),
+        }
+        data["진행상태"] = resolve_status(data)
+
+        try:
+            if mode == "신규 접수":
+                create_case(data)
+                folder = OUTPUT_ROOT / 번호
+                folder.mkdir(parents=True, exist_ok=True)
+                st.toast(f"✅ {번호} 접수 완료! (진행상태: {data['진행상태']})", icon="✅")
+                # ── 폼 완전 초기화 → 다음 접수번호 자동 반영
+                for k in [k for k in list(st.session_state) if k.startswith("inp_") or k == _init_key]:
+                    del st.session_state[k]
+                st.rerun()
+            else:
+                data.pop("접수번호", None)
+                update_case(번호, data)
+                badge = status_badge(data["진행상태"])
+                st.success(f"**{번호}** 수정 완료!")
+                st.markdown(f"진행상태: {badge}", unsafe_allow_html=True)
+                st.session_state.pop("_active_edit", None)
+        except Exception as e:
+            st.error(f"저장 오류: {e}")
+
+    st.markdown(
+        '<p style="font-size:0.8rem;color:#94A3B8;margin-top:12px;">'
+        '✦ 주소 검색 버튼 클릭 → 다음 주소창 → 선택 시 자동 입력됩니다. &nbsp;'
+        '✦ 회신기한은 안내도달일 + 설정 일수로 자동 계산됩니다.'
+        '</p>',
+        unsafe_allow_html=True,
+    )
+
+# ══════════════════════════════════════════════════════════════
+# 탭 2: 엑셀 일괄 가져오기
+# ══════════════════════════════════════════════════════════════
+with tab_bulk:
+    st.markdown("#### 1단계 — 양식 다운로드")
+    col_tmpl, _ = st.columns([2, 3])
+    with col_tmpl:
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, Alignment, PatternFill
+            import io
+
+            def _make_template() -> bytes:
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "사건목록"
+                headers = [
+                    "접수번호", "접수연도", "지역", "건물명", "건물소재지",
+                    "신청인_성명", "신청인_주소", "신청인_연락처",
+                    "피신청인_성명", "피신청인_주소", "피신청인_연락처", "피신청인_우편번호",
+                    "신청내용", "분쟁유형", "접수일자", "조정동의여부",
+                ]
+                fill = PatternFill("solid", fgColor="1A56A0")
+                font = Font(bold=True, color="FFFFFF")
+                for col, h in enumerate(headers, 1):
+                    c = ws.cell(1, col, h)
+                    c.fill = fill
+                    c.font = font
+                    c.alignment = Alignment(horizontal="center")
+                    ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = max(len(h)+4, 14)
+                ws.append(["2026-999", 2026, "수원시", "예시아파트", "경기도 수원시...",
+                            "홍길동", "경기도 수원시...", "010-0000-0000",
+                            "김철수", "경기도 성남시...", "010-1111-1111", "12345",
+                            "관리비 미납", "관리비", "2026-01-01", "동의"])
+                buf = io.BytesIO()
+                wb.save(buf)
+                return buf.getvalue()
+
+            st.download_button(
+                "📥 양식 다운로드 (.xlsx)",
+                data=_make_template(),
+                file_name="사건등록_양식.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        except ImportError:
+            st.warning("openpyxl이 설치되지 않아 양식 다운로드를 사용할 수 없습니다.")
+
+    st.markdown("---")
+    st.markdown("#### 2단계 — 파일 업로드 및 미리보기")
+
+    uploaded = st.file_uploader("엑셀 파일 선택 (.xlsx)", type=["xlsx"],
+                                label_visibility="collapsed", key="bulk_upload")
+
+    if uploaded:
+        try:
+            import pandas as pd
+            df = pd.read_excel(uploaded, dtype=str)
+            df = df.fillna("")
+            st.markdown(f"**{len(df)}행 감지됨**")
+            st.dataframe(df.head(10), use_container_width=True, hide_index=True)
+
+            col_dup, col_go = st.columns([2, 1])
+            with col_dup:
+                skip_dup = st.checkbox("이미 등록된 접수번호 건너뛰기", value=True, key="bulk_skip_dup")
+
+            with col_go:
+                if st.button("✅ 가져오기 실행", type="primary", use_container_width=True, key="bulk_run"):
+                    ok = err = dup = 0
+                    log_lines = []
+                    for _, row in df.iterrows():
+                        case_no = str(row.get("접수번호", "")).strip()
+                        if not case_no:
+                            err += 1
+                            log_lines.append("❌ 접수번호 없음 (행 건너뜀)")
+                            continue
+                        if case_exists(case_no):
+                            if skip_dup:
+                                dup += 1
+                                log_lines.append(f"⏭ {case_no} — 이미 존재 (건너뜀)")
+                                continue
+                        try:
+                            data = {k: (row.get(k, "") or "") for k in [
+                                "접수번호", "접수연도", "지역", "건물명", "건물소재지",
+                                "신청인_성명", "신청인_주소", "신청인_연락처",
+                                "피신청인_성명", "피신청인_주소", "피신청인_연락처", "피신청인_우편번호",
+                                "신청내용", "분쟁유형", "접수일자", "조정동의여부",
+                            ]}
+                            if not data.get("접수연도"):
+                                import re as _re
+                                m = _re.match(r"(\d{4})", case_no)
+                                data["접수연도"] = int(m.group(1)) if m else today.year
+                            else:
+                                try:
+                                    data["접수연도"] = int(data["접수연도"])
+                                except Exception:
+                                    data["접수연도"] = today.year
+                            create_case(data)
+                            ok += 1
+                            log_lines.append(f"✅ {case_no} — 등록 완료")
+                        except Exception as e:
+                            err += 1
+                            log_lines.append(f"❌ {case_no} — 오류: {e}")
+
+                    st.success(f"완료: 등록 {ok}건 | 중복 {dup}건 | 오류 {err}건")
+                    with st.expander("상세 로그"):
+                        st.text("\n".join(log_lines))
+
+        except Exception as e:
+            st.error(f"파일 읽기 오류: {e}")
+
+    st.markdown("---")
+    st.markdown("""
+**컬럼 안내**
+
+| 컬럼명 | 필수 | 설명 |
+|--------|------|------|
+| 접수번호 | ✓ | 예: 2026-001 |
+| 접수연도 | | 비어 있으면 접수번호에서 자동 추출 |
+| 지역 / 건물명 / 건물소재지 | | 건물 기본 정보 |
+| 신청인_성명·주소·연락처 | ✓ | |
+| 피신청인_성명·주소·연락처·우편번호 | ✓ | |
+| 신청내용 / 분쟁유형 | | |
+| 접수일자 | | YYYY-MM-DD 형식 |
+| 조정동의여부 | | 동의 / 미동의 |
+""")

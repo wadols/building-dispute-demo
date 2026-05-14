@@ -2,6 +2,7 @@
 위원회 개최 — 개최 등록 / 결과 입력 / 위원 배정
 """
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date, datetime
 from pathlib import Path
@@ -15,6 +16,8 @@ from core.db import (
     get_all_members, set_hearing_members, get_hearing_members,
 )
 from core.ui_styles import inject_css, page_header, status_badge
+from core.hwpx_handler import generate_hearing_docs
+from core.excel_handler import generate_docheong_visit, generate_susang_excel
 
 st.set_page_config(page_title="위원회 개최", page_icon="🏛️", layout="wide")
 if "db_initialized" not in st.session_state:
@@ -24,7 +27,17 @@ if "db_initialized" not in st.session_state:
 inject_css()
 page_header("🏛️", "위원회 개최", "개최 등록 · 위원 배정 · 결과 입력")
 
-tab_list, tab_add, tab_result = st.tabs(["📋 개최 목록", "➕ 개최 등록", "✏️ 결과 입력"])
+# 등록/결과입력 완료 후 목록 탭으로 자동 이동
+if st.session_state.pop("_go_to_hearing_list", False):
+    components.html(
+        "<script>setTimeout(function(){"
+        "var tabs=window.parent.document.querySelectorAll('[data-baseweb=\"tab\"]');"
+        "if(tabs.length>0)tabs[0].click();"
+        "},300);</script>",
+        height=0,
+    )
+
+tab_list, tab_add, tab_result, tab_docs = st.tabs(["📋 개최 목록", "➕ 개최 등록", "✏️ 결과 입력", "📄 문서 생성"])
 
 # ══════════════════════════════════════════════
 # 탭1: 개최 목록
@@ -205,11 +218,10 @@ with tab_add:
                 if sel_members:
                     set_hearing_members(hid, sel_members)
                 st.cache_data.clear()
-                st.success(f"개최 등록 완료 (ID: {hid}, 사건: {sel_case} {inp_round}회차)")
                 for k in ["new_h_case_label", "new_h_round", "new_h_place",
                            "new_h_dt", "new_h_agenda", "new_h_note", "new_h_members"]:
-                    if k in st.session_state:
-                        del st.session_state[k]
+                    st.session_state.pop(k, None)
+                st.session_state["_go_to_hearing_list"] = True
                 st.rerun()
 
 # ══════════════════════════════════════════════
@@ -275,9 +287,123 @@ with tab_result:
                         if res_outcome in result_map:
                             update_case(h["접수번호"], {"결과": result_map[res_outcome]})
                     st.cache_data.clear()
-                    st.success("결과 저장 완료")
+                    st.session_state["_go_to_hearing_list"] = True
                     st.rerun()
         else:
             st.error("존재하지 않는 개최 ID입니다.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════
+# 탭4: 문서 생성
+# ══════════════════════════════════════════════
+with tab_docs:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("#### 개최 문서 일괄 생성")
+    st.caption("개최 일정을 선택하면 관련 hwpx 문서 8종을 자동으로 생성합니다.")
+
+    all_hearings_d = get_all_hearings()
+    doc_opts = {
+        f"{dict(r)['접수번호']} {dict(r).get('회차', '')}회차  ({(dict(r).get('개최예정일시') or '')[:10]})": dict(r)["id"]
+        for r in all_hearings_d
+    }
+
+    doc_sel = st.selectbox(
+        "개최 일정 선택",
+        [""] + list(doc_opts.keys()),
+        label_visibility="collapsed",
+        placeholder="문서를 생성할 개최 일정을 선택하세요",
+        key="doc_hearing_sel",
+    )
+
+    if doc_sel:
+        hid = doc_opts[doc_sel]
+        h   = dict(get_hearing(hid))
+        c   = dict(get_case(h["접수번호"]))
+        mems = [dict(m) for m in get_hearing_members(hid)]
+
+        st.info(
+            f"📌 **{h['접수번호']}** {h.get('회차','')}회차 | "
+            f"{(h.get('개최예정일시') or '')[:16]} | "
+            f"{h.get('개최장소','')}"
+        )
+
+        if mems:
+            role_order = {"위원장": 0, "위원": 1, "간사": 2}
+            sorted_mems = sorted(mems, key=lambda m: role_order.get(m.get("역할", "위원"), 1))
+            mem_text = " · ".join(
+                f"{m['성명']}({m.get('역할','위원')})" for m in sorted_mems
+            )
+            st.markdown(f"**참석 위원:** {mem_text}")
+        else:
+            st.warning("참석 위원이 배정되지 않았습니다. '개최 등록' 탭에서 위원을 배정하세요.")
+
+        with st.expander("생성될 문서 목록", expanded=True):
+            doc_names = [
+                "개최알림_참석요청 공문",
+                "참석위원명단",
+                "개최계획",
+                "조정서",
+                "간사 시나리오",
+                "위원장 시나리오",
+                "위원 서명부",
+                "제안서 수령증",
+            ]
+            for name in doc_names:
+                st.markdown(f"- `{name}_{h['접수번호']}_{h.get('회차',1)}차.hwpx`")
+
+        st.markdown("---")
+        col_hwpx, col_excel = st.columns(2)
+
+        with col_hwpx:
+            if st.button("📄 문서 8종 일괄 생성", type="primary", use_container_width=True):
+                with st.spinner("문서 생성 중..."):
+                    try:
+                        generated = generate_hearing_docs(c, h, mems)
+                        st.success(f"✅ {len(generated)}개 문서 생성 완료!")
+                        if generated:
+                            st.markdown(f"**저장 위치:** `{generated[0].parent}`")
+                        for p in generated:
+                            st.markdown(f"- `{p.name}`")
+                    except Exception as e:
+                        st.error(f"생성 실패: {e}")
+
+        with col_excel:
+            if st.button("📊 도청방문등록 엑셀 생성", use_container_width=True):
+                with st.spinner("엑셀 생성 중..."):
+                    try:
+                        excel_path = generate_docheong_visit(c, h, mems)
+                        st.success("✅ 도청방문등록 엑셀 생성 완료!")
+                        with open(excel_path, "rb") as f:
+                            st.download_button(
+                                "⬇️ 다운로드",
+                                data=f.read(),
+                                file_name=excel_path.name,
+                                mime="application/vnd.ms-excel",
+                                use_container_width=True,
+                            )
+                    except Exception as e:
+                        st.error(f"생성 실패: {e}")
+
+        st.markdown("---")
+        st.markdown("##### 결과보고 문서")
+        col_susang, _ = st.columns(2)
+
+        with col_susang:
+            if st.button("💰 수당 지급내역 엑셀 생성", use_container_width=True):
+                with st.spinner("엑셀 생성 중..."):
+                    try:
+                        susang_path = generate_susang_excel(c, h, mems)
+                        st.success("✅ 수당 지급내역 생성 완료!")
+                        with open(susang_path, "rb") as f:
+                            st.download_button(
+                                "⬇️ 다운로드",
+                                data=f.read(),
+                                file_name=susang_path.name,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                            )
+                    except Exception as e:
+                        st.error(f"생성 실패: {e}")
 
     st.markdown('</div>', unsafe_allow_html=True)
