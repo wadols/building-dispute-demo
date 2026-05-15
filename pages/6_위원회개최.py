@@ -16,8 +16,8 @@ from core.db import (
     get_all_members, set_hearing_members, get_hearing_members,
 )
 from core.ui_styles import inject_css, page_header, status_badge
-from core.hwpx_handler import generate_hearing_docs
-from core.excel_handler import generate_docheong_visit, generate_susang_excel
+from core.hwpx_handler import generate_hearing_docs, generate_result_docs
+from core.excel_handler import generate_docheong_visit, generate_susang_excel, generate_result_susang_excel
 
 st.set_page_config(page_title="위원회 개최", page_icon="🏛️", layout="wide")
 if "db_initialized" not in st.session_state:
@@ -386,14 +386,27 @@ with tab_docs:
                         st.error(f"생성 실패: {e}")
 
         st.markdown("---")
-        st.markdown("##### 결과보고 문서")
-        col_susang, _ = st.columns(2)
+        st.markdown("##### 📋 결과보고 문서")
+        col_result1, col_result2 = st.columns(2)
 
-        with col_susang:
-            if st.button("💰 수당 지급내역 엑셀 생성", use_container_width=True):
+        with col_result1:
+            if st.button("📄 결과보고 문서 생성\n(조정결과보고 · 회의록)", use_container_width=True):
+                with st.spinner("문서 생성 중..."):
+                    try:
+                        generated = generate_result_docs(c, h, mems)
+                        st.success(f"✅ {len(generated)}개 문서 생성 완료!")
+                        for p in generated:
+                            st.markdown(f"- `{p.name}`")
+                        if generated:
+                            st.markdown(f"**저장 위치:** `{generated[0].parent}`")
+                    except Exception as e:
+                        st.error(f"생성 실패: {e}")
+
+        with col_result2:
+            if st.button("💰 수당 지급내역 생성", use_container_width=True):
                 with st.spinner("엑셀 생성 중..."):
                     try:
-                        susang_path = generate_susang_excel(c, h, mems)
+                        susang_path = generate_result_susang_excel(c, h, mems)
                         st.success("✅ 수당 지급내역 생성 완료!")
                         with open(susang_path, "rb") as f:
                             st.download_button(

@@ -8,6 +8,8 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 HEARING_OUTPUT_DIR = Path(__file__).parent.parent / "output" / "위원회개최"
+RESULT_OUTPUT_DIR  = Path(__file__).parent.parent / "output" / "위원회결과보고"
+RESULT_SUSANG_TEMPLATE = Path(__file__).parent.parent / "템플릿" / "위원회 결과보고" / "수당 지급내역.xlsx"
 
 
 def _thin_border():
@@ -303,6 +305,84 @@ def generate_susang_excel(case: dict, hearing: dict, members: list[dict]) -> Pat
     # 비고 행 이동 (기존 A14 → 실제 DATA_START+n+1 행)
     note_row = DATA_START + n + 1
     ws.cell(row=note_row, column=1).value = "※ 참석수당 : 2시간까지 200,000원(2시간 초과 100,000원)"
+
+    wb.save(str(out_path))
+    return out_path
+
+
+# ────────────────────────────────────────────────
+# 위원회 결과보고 수당 지급내역 (템플릿 서식 보존)
+# ────────────────────────────────────────────────
+
+def generate_result_susang_excel(case: dict, hearing: dict, members: list[dict]) -> Path:
+    """
+    템플릿(위원회 결과보고/수당 지급내역.xlsx)의 서식을 그대로 유지하면서
+    일시·장소·조정내용·성명·생년월일·은행·계좌번호만 채워 넣음.
+    """
+    from datetime import datetime as _dt
+
+    접수번호  = case.get("접수번호", "unknown")
+    회차      = hearing.get("회차", 1)
+    접수연도  = case.get("접수연도", date.today().year)
+
+    out_dir = HEARING_OUTPUT_DIR / f"{접수번호}_{회차}차" / "결과보고"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"수당지급내역_{접수번호}_{회차}차.xlsx"
+
+    wb = openpyxl.load_workbook(str(RESULT_SUSANG_TEMPLATE))
+    ws = wb.active
+
+    def _fmt_dt(dt_str):
+        if not dt_str:
+            return ""
+        try:
+            dt = _dt.fromisoformat(str(dt_str).replace(" ", "T"))
+            요일 = ["월", "화", "수", "목", "금", "토", "일"][dt.weekday()]
+            return f"{dt.year}. {dt.month}. {dt.day}.({요일}) {dt.hour:02d}:{dt.minute:02d}"
+        except Exception:
+            return str(dt_str)
+
+    일시  = _fmt_dt(hearing.get("개최예정일시"))
+    장소  = hearing.get("개최장소", "") or ""
+    내용  = hearing.get("조정내용", "") or case.get("신청내용", "") or ""
+
+    role_order  = {"위원장": 0, "위원": 1, "간사": 2}
+    sorted_mems = sorted(members, key=lambda m: role_order.get(m.get("역할", "위원"), 1))
+    n = len(sorted_mems)
+
+    # 제목 갱신 (A1)
+    ws["A1"].value = f"{접수연도}년 제{회차}회 경기도 집합건물 분쟁조정위원회 회의 수당지급내역"
+
+    # 정보 행 — "O 레이블 : 값" 형식 그대로 유지
+    ws["A3"].value = f"O 일      시 : {일시}"
+    ws["A4"].value = f"O 장      소 : {장소}"
+    ws["A5"].value = f"O 조정내용 : {내용}"
+    ws["A6"].value = f"O 참석위원 : {n}명"
+    ws["B10"].value = f"{n}명"
+
+    # 위원 데이터 행 (11행~): 성명/생년월일/은행/계좌만 덮어씀, 나머지 서식 유지
+    DATA_START = 11
+    MAX_ROWS   = 7
+
+    for i in range(MAX_ROWS):
+        row = DATA_START + i
+        if i < n:
+            m = sorted_mems[i]
+            birth_raw = str(m.get("생년월일") or "").replace("-", "")
+            if len(birth_raw) == 8:
+                birth_val = int(birth_raw[2:])
+            elif len(birth_raw) == 6:
+                birth_val = int(birth_raw)
+            else:
+                birth_val = None
+            ws.cell(row=row, column=1).value = i + 1
+            ws.cell(row=row, column=2).value = m.get("성명", "")
+            ws.cell(row=row, column=3).value = birth_val
+            ws.cell(row=row, column=8).value = m.get("은행명", "") or ""
+            ws.cell(row=row, column=9).value = m.get("계좌번호", "") or ""
+        else:
+            for col in (1, 2, 3, 8, 9):
+                ws.cell(row=row, column=col).value = None
 
     wb.save(str(out_path))
     return out_path

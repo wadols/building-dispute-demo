@@ -178,3 +178,144 @@ if period_cases:
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 else:
     st.info("해당 기간 사건이 없습니다.")
+
+# ── 엑셀 내보내기
+st.markdown("---")
+if st.button("📥 엑셀로 내보내기", type="primary"):
+    import io, openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side, numbers
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+
+    # ── 공통 스타일 ──────────────────────────────
+    BLUE      = "1A56A0"
+    BLUE_FONT = Font(bold=True, color="FFFFFF")
+    HDR_FILL  = PatternFill("solid", fgColor=BLUE)
+    SUB_FILL  = PatternFill("solid", fgColor="D9E1F2")
+    BOLD      = Font(bold=True)
+    CENTER    = Alignment(horizontal="center", vertical="center")
+    def thin_border():
+        s = Side(style="thin")
+        return Border(left=s, right=s, top=s, bottom=s)
+
+    def write_header(ws, row, cols, fill=None):
+        fill = fill or HDR_FILL
+        for c, val in enumerate(cols, 1):
+            cell = ws.cell(row=row, column=c, value=val)
+            cell.font  = BLUE_FONT if fill == HDR_FILL else BOLD
+            cell.fill  = fill
+            cell.alignment = CENTER
+            cell.border = thin_border()
+
+    def write_row(ws, row, vals):
+        for c, val in enumerate(vals, 1):
+            cell = ws.cell(row=row, column=c, value=val)
+            cell.alignment = Alignment(vertical="center")
+            cell.border    = thin_border()
+
+    # ════════════════════════════════════════════
+    # 시트1: 통계 요약
+    # ════════════════════════════════════════════
+    ws1 = wb.active
+    ws1.title = "통계요약"
+
+    # 제목
+    ws1.merge_cells("A1:F1")
+    t = ws1["A1"]
+    t.value     = f"집합건물 분쟁조정위원회 업무 통계 — {period_label}"
+    t.font      = Font(bold=True, size=14)
+    t.alignment = CENTER
+    ws1.row_dimensions[1].height = 28
+
+    # KPI
+    r = 3
+    ws1.merge_cells(f"A{r}:F{r}")
+    ws1[f"A{r}"].value = "▶ 주요 지표"
+    ws1[f"A{r}"].font  = BOLD
+    r += 1
+    write_header(ws1, r, ["접수건수", "처리중", "종결", "동의율", "성립건수", "조정성립률"])
+    r += 1
+    write_row(ws1, r, [
+        stats["접수건수"], stats["처리중"], stats["종결"],
+        f"{stats['동의율']}%", stats["성립건수"], f"{stats['성립률']}%",
+    ])
+    r += 2
+
+    # 분쟁유형별
+    ws1.merge_cells(f"A{r}:B{r}")
+    ws1[f"A{r}"].value = "▶ 분쟁유형별"
+    ws1[f"A{r}"].font  = BOLD
+    r += 1
+    write_header(ws1, r, ["분쟁유형", "건수"], fill=SUB_FILL)
+    r += 1
+    for item in stats.get("분쟁유형별", []):
+        write_row(ws1, r, [item.get("분쟁유형") or "미분류", item.get("cnt", 0)])
+        r += 1
+    r += 1
+
+    # 지역별
+    ws1.merge_cells(f"A{r}:B{r}")
+    ws1[f"A{r}"].value = "▶ 지역별"
+    ws1[f"A{r}"].font  = BOLD
+    r += 1
+    write_header(ws1, r, ["지역", "건수"], fill=SUB_FILL)
+    r += 1
+    for item in stats.get("지역별", []):
+        write_row(ws1, r, [item.get("지역") or "미지정", item.get("cnt", 0)])
+        r += 1
+    r += 1
+
+    # 월별 추이 (연도별 모드)
+    if period_type == "연도별":
+        monthly = get_monthly_counts(sel_year)
+        if monthly:
+            ws1.merge_cells(f"A{r}:C{r}")
+            ws1[f"A{r}"].value = "▶ 월별 접수·종결 추이"
+            ws1[f"A{r}"].font  = BOLD
+            r += 1
+            write_header(ws1, r, ["월", "접수", "종결"], fill=SUB_FILL)
+            r += 1
+            for item in monthly:
+                write_row(ws1, r, [f"{item['월']}월", item.get("접수", 0), item.get("종결", 0)])
+                r += 1
+
+    # 컬럼 너비
+    for col, w in zip("ABCDEF", [16, 12, 12, 12, 12, 14]):
+        ws1.column_dimensions[col].width = w
+
+    # ════════════════════════════════════════════
+    # 시트2: 사건 목록
+    # ════════════════════════════════════════════
+    ws2 = wb.create_sheet("사건목록")
+    ws2.merge_cells("A1:G1")
+    t2 = ws2["A1"]
+    t2.value     = f"{period_label} 사건 목록"
+    t2.font      = Font(bold=True, size=13)
+    t2.alignment = CENTER
+    ws2.row_dimensions[1].height = 24
+
+    write_header(ws2, 2, ["접수번호", "신청인", "피신청인", "분쟁유형", "결과", "접수일자", "지역"])
+    for i, c in enumerate(period_cases, 3):
+        d = dict(c)
+        write_row(ws2, i, [
+            d.get("접수번호", ""), d.get("신청인_성명", ""),
+            d.get("피신청인_성명", ""), d.get("분쟁유형", ""),
+            d.get("결과", ""), d.get("접수일자", ""), d.get("지역", ""),
+        ])
+
+    for col, w in zip("ABCDEFG", [16, 12, 14, 12, 10, 12, 16]):
+        ws2.column_dimensions[col].width = w
+
+    # ── 다운로드 ─────────────────────────────────
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"보고서_{period_label.replace(' ','').replace('~','-')}_{date.today()}.xlsx"
+    st.download_button(
+        "⬇️ 다운로드",
+        data=buf.read(),
+        file_name=fname,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )

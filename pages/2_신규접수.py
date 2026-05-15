@@ -169,7 +169,6 @@ with tab_single:
                             "피신청인_연락처":"inp_피신청인_연락처",
                             "지역":           "inp_지역",
                             "건물소재지":     "inp_건물소재지",
-                            "신청내용":       "inp_신청내용",
                         }
                         filled, skipped = [], []
                         for src, dst in field_map.items():
@@ -185,6 +184,18 @@ with tab_single:
                                 filled.append("접수일자")
                             except Exception:
                                 pass
+
+                        # 우편번호 자동 조회 (카카오 로컬 API)
+                        from core.kakao_api import lookup_postcode
+                        for addr_key, zip_key, label in [
+                            ("신청인_주소",  "inp_신청인_우편번호",  "신청인 우편번호"),
+                            ("피신청인_주소","inp_피신청인_우편번호","피신청인 우편번호"),
+                        ]:
+                            if parsed.get(addr_key):
+                                postcode = lookup_postcode(parsed[addr_key])
+                                if postcode:
+                                    st.session_state[zip_key] = postcode
+                                    filled.append(label)
 
                         if not raw_text.strip():
                             msg["error"] = "PDF에서 텍스트를 읽지 못했습니다. 스캔 이미지 PDF이거나 보안이 걸린 파일일 수 있습니다."
@@ -303,7 +314,7 @@ with tab_single:
     with d1:
         st.date_input("안내도달일", key="inp_안내도달일")
     with d2:
-        deadline_days = st.number_input("회신기한 (일)", min_value=1, max_value=60, value=14)
+        deadline_days = st.number_input("회신기한 (일)", min_value=1, max_value=60, value=7)
     with d3:
         # 안내도달일 변경 시 회신기한 자동 계산
         안내도달일_val = st.session_state.get("inp_안내도달일")

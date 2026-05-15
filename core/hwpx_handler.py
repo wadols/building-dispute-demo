@@ -176,6 +176,17 @@ def _hwpx_binary_patch(src_path: Path, out_path: Path, mapping: dict) -> None:
     entries = _parse_locals(raw)
 
     # ─── 2단계: 변경 대상 항목 재압축 ───────────────────────
+    import re as _re
+
+    def _strip_section_protect(xml: str) -> str:
+        """section0.xml에서 셀/객체 보호 속성 제거 → HWP 보안 경고 방지"""
+        xml = _re.sub(r'\bprotect="1"', 'protect="0"', xml)
+        xml = _re.sub(r'\beditable="1"', 'editable="0"', xml)
+        # 섹션 수준 보호 요소 제거
+        xml = _re.sub(r'<hp:prot\b[^/]*/>', '', xml)
+        xml = _re.sub(r'<hp:prot\b[^>]*>.*?</hp:prot>', '', xml, flags=_re.DOTALL)
+        return xml
+
     changed: dict[str, tuple] = {}   # fname → (new_compressed, new_crc32, new_uncomp_size)
     for e in entries:
         fn = e['fname']
@@ -188,6 +199,8 @@ def _hwpx_binary_patch(src_path: Path, out_path: Path, mapping: dict) -> None:
                 orig_bytes = raw_comp
             text     = orig_bytes.decode('utf-8', errors='ignore')
             text     = _fill_template(text, mapping)
+            if fn.startswith('Contents/section'):
+                text = _strip_section_protect(text)
             new_data = text.encode('utf-8')
             if e['method'] == 8:
                 cobj     = zlib.compressobj(9, zlib.DEFLATED, -15)
@@ -256,6 +269,68 @@ def _hwpx_binary_patch(src_path: Path, out_path: Path, mapping: dict) -> None:
     result += bytes(eocd)
 
     out_path.write_bytes(bytes(result))
+
+
+RESULT_TEMPLATE_DIR = Path(__file__).parent.parent / "템플릿" / "위원회 결과보고"
+RESULT_OUTPUT_DIR   = Path(__file__).parent.parent / "output" / "위원회결과보고"
+
+RESULT_TEMPLATES = [
+    "조정 결과보고.hwpx",
+    "회의록.hwpx",
+]
+
+
+def _build_result_mapping(case: dict, hearing: dict, members: list[dict]) -> dict:
+    role_order = {"위원장": 0, "위원": 1, "간사": 2}
+    sorted_members = sorted(members, key=lambda m: role_order.get(m.get("역할", "위원"), 1))
+
+    조정내용 = hearing.get("조정내용", "") or case.get("신청내용", "") or ""
+
+    mapping = {
+        "접수연도":      str(case.get("접수연도", "")),
+        "회차":          str(hearing.get("회차", "")),
+        "건물명":        case.get("건물명", "") or "",
+        "개최예정일시":  _kor_datetime(hearing.get("개최예정일시")),
+        "개최장소":      hearing.get("개최장소", "") or "",
+        "신청인_성명":   case.get("신청인_성명", ""),
+        "신청인_지위":   case.get("신청인_지위", "") or "",
+        "피신청인_성명": case.get("피신청인_성명", ""),
+        "피신청인_지위": case.get("피신청인_지위", "") or "",
+        "조정내용":      조정내용,
+    }
+
+    for i, m in enumerate(sorted_members, 1):
+        mapping[f"위원{i}_성명"] = m.get("성명", "")
+        mapping[f"위원{i}_직위"] = m.get("직위", "") or ""
+
+    for i in range(len(sorted_members) + 1, 8):
+        mapping[f"위원{i}_성명"] = ""
+        mapping[f"위원{i}_직위"] = ""
+
+    return mapping
+
+
+def generate_result_docs(case: dict, hearing: dict, members: list[dict]) -> list[Path]:
+    """위원회 결과보고 hwpx 문서(조정 결과보고·회의록) 일괄 생성."""
+    접수번호 = case.get("접수번호", "unknown")
+    회차     = hearing.get("회차", 1)
+
+    out_dir = HEARING_OUTPUT_DIR / f"{접수번호}_{회차}차" / "결과보고"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    mapping   = _build_result_mapping(case, hearing, members)
+    generated = []
+
+    for tname in RESULT_TEMPLATES:
+        tpath = RESULT_TEMPLATE_DIR / tname
+        if not tpath.exists():
+            continue
+        stem     = tname.replace(".hwpx", "")
+        out_path = out_dir / f"{stem}_{접수번호}_{회차}차.hwpx"
+        _hwpx_binary_patch(tpath, out_path, mapping)
+        generated.append(out_path)
+
+    return generated
 
 
 def generate_hearing_docs(case: dict, hearing: dict, members: list[dict]) -> list[Path]:

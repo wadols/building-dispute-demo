@@ -306,4 +306,99 @@ if sel_list:
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# 사이드바는 비워둠 (접수대장에서 직접 선택 → 수정)
+# ══════════════════════════════════════════════
+# 엑셀 내보내기
+# ══════════════════════════════════════════════
+st.markdown('<div class="card">', unsafe_allow_html=True)
+st.markdown("#### 📤 엑셀 내보내기")
+
+ex1, ex2 = st.columns(2)
+with ex1:
+    export_scope = st.radio(
+        "내보낼 범위",
+        ["현재 필터 결과", "전체 (연도 무관)"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+if st.button("📥 엑셀 다운로드", type="primary"):
+    import io, openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    if export_scope == "현재 필터 결과":
+        if not df.empty and "접수번호" in df.columns:
+            full_rows = [dict(get_case(no)) for no in df["접수번호"] if get_case(no)]
+        else:
+            full_rows = []
+    else:
+        full_rows = [dict(r) for r in get_all_cases()]
+
+    if not full_rows:
+        st.warning("내보낼 데이터가 없습니다.")
+    else:
+        wb  = openpyxl.Workbook()
+        ws  = wb.active
+        ws.title = "접수대장"
+
+        COLS = [
+            ("접수번호",       "접수번호"),
+            ("접수연도",       "접수연도"),
+            ("접수일자",       "접수일자"),
+            ("지역",           "지역"),
+            ("분쟁유형",       "분쟁유형"),
+            ("건물명",         "건물명"),
+            ("건물소재지",     "건물소재지"),
+            ("신청인_성명",    "신청인 성명"),
+            ("신청인_지위",    "신청인 지위"),
+            ("신청인_주소",    "신청인 주소"),
+            ("신청인_우편번호","신청인 우편번호"),
+            ("신청인_연락처",  "신청인 연락처"),
+            ("피신청인_성명",  "피신청인 성명"),
+            ("피신청인_지위",  "피신청인 지위"),
+            ("피신청인_주소",  "피신청인 주소"),
+            ("피신청인_우편번호","피신청인 우편번호"),
+            ("피신청인_연락처","피신청인 연락처"),
+            ("안내도달일",     "안내도달일"),
+            ("회신기한",       "회신기한"),
+            ("회신접수일",     "회신접수일"),
+            ("조정동의여부",   "조정동의여부"),
+            ("개최여부",       "개최여부"),
+            ("결과",           "결과"),
+            ("종결일자",       "종결일자"),
+        ]
+
+        thin   = Side(style="thin")
+        BORDER = Border(left=thin, right=thin, top=thin, bottom=thin)
+        CENTER = Alignment(horizontal="center", vertical="center")
+
+        for c_idx, (_, label) in enumerate(COLS, 1):
+            cell = ws.cell(row=1, column=c_idx, value=label)
+            cell.fill      = PatternFill("solid", fgColor="1A56A0")
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.alignment = CENTER
+            cell.border    = BORDER
+
+        for r_idx, row in enumerate(full_rows, 2):
+            for c_idx, (field, _) in enumerate(COLS, 1):
+                cell = ws.cell(row=r_idx, column=c_idx, value=row.get(field, "") or "")
+                cell.alignment = Alignment(vertical="center")
+                cell.border    = BORDER
+
+        for c_idx, (_, label) in enumerate(COLS, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(c_idx)].width = max(len(label)+3, 12)
+        ws.freeze_panes = "A2"
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        fname = f"접수대장_{date.today()}.xlsx"
+        st.success(f"✅ {len(full_rows)}건")
+        st.download_button(
+            "⬇️ 다운로드",
+            data=buf.read(),
+            file_name=fname,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+st.markdown('</div>', unsafe_allow_html=True)
