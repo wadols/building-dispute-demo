@@ -105,8 +105,6 @@ with tab_list:
             st.markdown("---")
             st.markdown(f"### ✏️ {sel_row['성명']} 위원")
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-
             c1, c2, c3 = st.columns(3)
             with c1:
                 e_name  = st.text_input("성명 *",    value=sel_row.get("성명", ""),        key="e_성명")
@@ -139,8 +137,6 @@ with tab_list:
                 key="e_career",
                 placeholder="예)\n서울대학교 법학과 졸업\n법무법인 ○○ 변호사 (2010~2020)",
             )
-
-            st.markdown('</div>', unsafe_allow_html=True)
 
             col_save, col_del = st.columns([4, 1])
             with col_save:
@@ -189,7 +185,6 @@ with tab_add:
     # 등록할 때마다 카운터를 올려서 모든 위젯 키를 새로 만들어 초기화
     fk = st.session_state.get("_new_member_fk", 0)
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("#### 위원 정보 입력")
 
     c1, c2, c3 = st.columns(3)
@@ -216,8 +211,6 @@ with tab_add:
         height=130,
         placeholder="예)\n서울대학교 법학과 졸업\n법무법인 ○○ 변호사 (2010~2020)\n경기도 집합건물분쟁조정위원회 위원 (2021~현재)",
     )
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
     if st.button("💾 위원 등록", use_container_width=True, type="primary"):
         name = inp_name.strip()

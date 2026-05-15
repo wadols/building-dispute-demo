@@ -16,7 +16,8 @@
       "Bash(python -m py_compile pages/2_신규접수.py)",
       "Bash(python -c \"import streamlit; print\\(streamlit.__version__\\)\")",
       "Bash(python -m py_compile app.py)",
-      "Bash(python -m py_compile app.py pages/1_홈.py pages/4_사건상세.py)"
+      "Bash(python -m py_compile app.py pages/1_홈.py pages/4_사건상세.py)",
+      "Bash(powershell -Command \"Get-ChildItem '템플릿\\\\위원회 개최' | Select-Object Name\")"
     ]
   }
 }

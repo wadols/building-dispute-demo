@@ -16,7 +16,7 @@ from core.db import (
     get_notes, create_note, update_note, delete_note,
 )
 from core.status_resolver import resolve_status
-from core.ui_styles import inject_css, page_header, status_badge
+from core.ui_styles import inject_css, page_header, status_badge, section_header
 
 st.set_page_config(page_title="사건 상세", page_icon="🔎", layout="wide")
 if "db_initialized" not in st.session_state:
@@ -94,6 +94,45 @@ with col_d:
 st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════
+# 진행단계 시각화
+# ════════════════════════════════════════════════
+_steps_data = [
+    ("접수",    bool(case.get("접수일자")),              (case.get("접수일자") or "")[:10]),
+    ("안내발송", bool(case.get("안내도달일")),            (case.get("안내도달일") or "")[:10]),
+    ("회신",    bool(case.get("회신접수일")),             (case.get("회신접수일") or "")[:10]),
+    ("위원회",  case.get("개최여부") == "개최",           ""),
+    ("종결",    status == "종결",                         (case.get("종결일자") or "")[:10]),
+]
+_flags = [s[1] for s in _steps_data]
+_current_idx = next((i for i, f in enumerate(_flags) if not f), len(_steps_data))
+
+def _step_cell(label, sub, done, current):
+    if done:
+        circle = "background:#0066CC;color:#fff"; inner = "✓"; lc = "#0066CC"; lw = "700"
+    elif current:
+        circle = "background:#fff;border:2px solid #0066CC;color:#0066CC"; inner = "●"; lc = "#0066CC"; lw = "700"
+    else:
+        circle = "background:#F1F5F9;color:#CBD5E1"; inner = "·"; lc = "#94A3B8"; lw = "400"
+    sub_html = (f'<div style="font-size:10px;color:#94A3B8;text-align:center">{sub}</div>'
+                if sub else '<div style="font-size:10px;color:transparent">·</div>')
+    return (
+        f'<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;min-width:64px">'
+        f'<div style="width:30px;height:30px;border-radius:50%;{circle};'
+        f'display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">{inner}</div>'
+        f'<div style="font-size:11.5px;font-weight:{lw};color:{lc};white-space:nowrap">{label}</div>'
+        f'{sub_html}</div>'
+    )
+
+_step_html = '<div style="display:flex;align-items:flex-start;padding:14px 24px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:16px">'
+for _i, (_label, _done, _sub) in enumerate(_steps_data):
+    _step_html += _step_cell(_label, _sub, _done, _i == _current_idx)
+    if _i < len(_steps_data) - 1:
+        _line_color = "#0066CC" if _done else "#E2E8F0"
+        _step_html += f'<div style="flex:1;height:2px;background:{_line_color};margin-top:15px;min-width:16px"></div>'
+_step_html += '</div>'
+st.markdown(_step_html, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════
 # 탭
 # ════════════════════════════════════════════════
 tab1, tab2, tab3 = st.tabs(["📋 사건 정보", "📝 메모 / 일지", "📁 생성 문서"])
@@ -108,53 +147,62 @@ with tab1:
                 f'font-size:0.85rem;white-space:nowrap">{label}</td>'
                 f'<td style="padding:7px 12px;font-size:0.9rem">{v}</td></tr>')
 
-    def section(title, rows_html):
-        return (f'<div class="card"><div class="card-title">{title}</div>'
-                f'<table style="width:100%;border-collapse:collapse">{rows_html}</table></div>')
+    def info_table(rows_html):
+        return f'<table style="width:100%;border-collapse:collapse">{rows_html}</table>'
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(section("① 사건 기본",
-            row2("접수번호",  case["접수번호"]) +
-            row2("접수일자",  case["접수일자"]) +
-            row2("지역",      case["지역"]) +
-            row2("분쟁유형",  case.get("분쟁유형")) +
-            row2("건물명",    case.get("건물명")) +
-            row2("건물소재지",case.get("건물소재지")) +
-            row2("건축물용도",case.get("건축물용도")) +
-            row2("신청내용",  case.get("신청내용"))
-        ), unsafe_allow_html=True)
+        with st.container(border=True):
+            section_header("①", "사건 기본 정보")
+            st.markdown(info_table(
+                row2("접수번호",  case["접수번호"]) +
+                row2("접수일자",  case["접수일자"]) +
+                row2("지역",      case["지역"]) +
+                row2("분쟁유형",  case.get("분쟁유형")) +
+                row2("건물명",    case.get("건물명")) +
+                row2("건물소재지",case.get("건물소재지")) +
+                row2("건축물용도",case.get("건축물용도")) +
+                row2("신청내용",  case.get("신청내용"))
+            ), unsafe_allow_html=True)
 
-        st.markdown(section("③ 진행 정보",
-            row2("안내도달일",   case.get("안내도달일")) +
-            row2("회신기한",     case.get("회신기한")) +
-            row2("회신접수일",   case.get("회신접수일")) +
-            row2("조정동의여부", case.get("조정동의여부")) +
-            row2("개최여부",     case.get("개최여부")) +
-            row2("결과",         case.get("결과")) +
-            row2("종결일자",     case.get("종결일자")) +
-            row2("진행상태",     status)
-        ), unsafe_allow_html=True)
+        with st.container(border=True):
+            section_header("③", "진행 정보")
+            st.markdown(info_table(
+                row2("안내도달일",   case.get("안내도달일")) +
+                row2("회신기한",     case.get("회신기한")) +
+                row2("회신접수일",   case.get("회신접수일")) +
+                row2("조정동의여부", case.get("조정동의여부")) +
+                row2("개최여부",     case.get("개최여부")) +
+                row2("결과",         case.get("결과")) +
+                row2("종결일자",     case.get("종결일자")) +
+                row2("진행상태",     status)
+            ), unsafe_allow_html=True)
 
     with c2:
-        st.markdown(section("② 신청인",
-            row2("성명",   case["신청인_성명"]) +
-            row2("지위",   case.get("신청인_지위")) +
-            row2("주소",   case["신청인_주소"]) +
-            row2("우편번호",case.get("신청인_우편번호")) +
-            row2("연락처", case.get("신청인_연락처"))
-        ), unsafe_allow_html=True)
+        with st.container(border=True):
+            section_header("②", "신청인")
+            st.markdown(info_table(
+                row2("성명",    case["신청인_성명"]) +
+                row2("지위",    case.get("신청인_지위")) +
+                row2("주소",    case["신청인_주소"]) +
+                row2("우편번호",case.get("신청인_우편번호")) +
+                row2("연락처",  case.get("신청인_연락처"))
+            ), unsafe_allow_html=True)
 
-        st.markdown(section("④ 피신청인",
-            row2("성명",   case["피신청인_성명"]) +
-            row2("지위",   case.get("피신청인_지위")) +
-            row2("주소",   case["피신청인_주소"]) +
-            row2("우편번호",case.get("피신청인_우편번호")) +
-            row2("연락처", case.get("피신청인_연락처"))
-        ), unsafe_allow_html=True)
+        with st.container(border=True):
+            section_header("④", "피신청인")
+            st.markdown(info_table(
+                row2("성명",    case["피신청인_성명"]) +
+                row2("지위",    case.get("피신청인_지위")) +
+                row2("주소",    case["피신청인_주소"]) +
+                row2("우편번호",case.get("피신청인_우편번호")) +
+                row2("연락처",  case.get("피신청인_연락처"))
+            ), unsafe_allow_html=True)
 
     if st.button("✏️ 이 사건 수정하기", type="primary"):
         st.session_state["edit_case"] = case["접수번호"]
+        st.session_state["_edit_origin"] = "pages/4_사건상세.py"
+        st.session_state["_edit_origin_case"] = case["접수번호"]
         for k in list(st.session_state.keys()):
             if k.startswith("_form_ready_") or k.startswith("inp_"):
                 del st.session_state[k]
@@ -176,33 +224,33 @@ with tab2:
     }
 
     # ── 새 메모 작성
-    st.markdown('<div class="card"><div class="card-title">✏️ 새 메모 작성</div>', unsafe_allow_html=True)
-    with st.form("new_note_form", clear_on_submit=True):
-        nc1, nc2, nc3 = st.columns([2, 3, 1])
-        with nc1:
-            new_cat = st.selectbox("카테고리", CATS)
-        with nc2:
-            new_title = st.text_input("제목")
-        with nc3:
-            new_important = st.checkbox("⭐ 중요")
-        new_content = st.text_area("내용 *", height=90)
-        save_note = st.form_submit_button("💾 메모 저장", type="primary", use_container_width=True)
+    with st.container(border=True):
+        st.markdown('**✏️ 새 메모 작성**')
+        with st.form("new_note_form", clear_on_submit=True):
+            nc1, nc2, nc3 = st.columns([2, 3, 1])
+            with nc1:
+                new_cat = st.selectbox("카테고리", CATS)
+            with nc2:
+                new_title = st.text_input("제목")
+            with nc3:
+                new_important = st.checkbox("⭐ 중요")
+            new_content = st.text_area("내용 *", height=90)
+            save_note = st.form_submit_button("💾 메모 저장", type="primary", use_container_width=True)
 
-    if save_note:
-        if not new_content.strip():
-            st.error("내용을 입력하세요.")
-        else:
-            create_note({
-                "접수번호": 접수번호,
-                "카테고리": new_cat,
-                "제목":     new_title.strip() or None,
-                "내용":     new_content.strip(),
-                "중요표시": int(new_important),
-                "작성일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            })
-            st.toast("메모가 저장되었습니다.", icon="✅")
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+        if save_note:
+            if not new_content.strip():
+                st.error("내용을 입력하세요.")
+            else:
+                create_note({
+                    "접수번호": 접수번호,
+                    "카테고리": new_cat,
+                    "제목":     new_title.strip() or None,
+                    "내용":     new_content.strip(),
+                    "중요표시": int(new_important),
+                    "작성일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                st.toast("메모가 저장되었습니다.", icon="✅")
+                st.rerun()
 
     # ── 기존 메모 목록
     notes = get_notes(접수번호)
@@ -309,35 +357,34 @@ with tab3:
     files = sorted(case_folder.iterdir()) if case_folder.exists() else []
     doc_files = [f for f in files if f.is_file()]
 
-    st.markdown('<div class="card"><div class="card-title">📁 사건 폴더 파일 목록</div>',
-                unsafe_allow_html=True)
-    if doc_files:
-        for f in doc_files:
-            size_kb = f.stat().st_size / 1024
-            mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-            ext = f.suffix.lower()
-            icon = {"hwpx": "📄", ".xlsx": "📊", ".xls": "📊",
-                    ".png": "🖼️", ".pdf": "📕"}.get(ext, "📎")
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:10px;'
-                f'padding:8px 4px;border-bottom:1px solid #F1F5F9">'
-                f'<span style="font-size:1.1rem">{icon}</span>'
-                f'<span style="flex:1;font-size:0.9rem">{f.name}</span>'
-                f'<span style="font-size:0.78rem;color:#94A3B8">{size_kb:.1f} KB</span>'
-                f'<span style="font-size:0.78rem;color:#94A3B8;margin-left:12px">{mtime}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-    else:
-        st.info("아직 생성된 문서가 없습니다. 공문·통보서 등을 생성하면 여기에 표시됩니다.")
+    with st.container(border=True):
+        st.markdown('**📁 사건 폴더 파일 목록**')
+        if doc_files:
+            for f in doc_files:
+                size_kb = f.stat().st_size / 1024
+                mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+                ext = f.suffix.lower()
+                icon = {".hwpx": "📄", ".xlsx": "📊", ".xls": "📊",
+                        ".png": "🖼️", ".pdf": "📕"}.get(ext, "📎")
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;'
+                    f'padding:8px 4px;border-bottom:1px solid #F1F5F9">'
+                    f'<span style="font-size:1.1rem">{icon}</span>'
+                    f'<span style="flex:1;font-size:0.9rem">{f.name}</span>'
+                    f'<span style="font-size:0.78rem;color:#94A3B8">{size_kb:.1f} KB</span>'
+                    f'<span style="font-size:0.78rem;color:#94A3B8;margin-left:12px">{mtime}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("아직 생성된 문서가 없습니다. 공문·통보서 등을 생성하면 여기에 표시됩니다.")
 
-    st.markdown(f'<p style="font-size:0.78rem;color:#94A3B8;margin-top:8px">'
-                f'폴더 경로: <code>{case_folder}</code></p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-size:0.78rem;color:#94A3B8;margin-top:8px">'
+                    f'폴더 경로: <code>{case_folder}</code></p>', unsafe_allow_html=True)
 
-    if st.button("📂 탐색기에서 열기"):
-        import subprocess
-        subprocess.Popen(f'explorer "{case_folder}"')
-    st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("📂 탐색기에서 열기"):
+            import subprocess
+            subprocess.Popen(f'explorer "{case_folder}"')
 
 # ── 사이드바 빠른 이동
 st.sidebar.markdown("---")

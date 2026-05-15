@@ -1,6 +1,6 @@
 """
-접수대장 — 사건 조회·수정·문서 출력
-체크박스 1개로 선택 → 하단 버튼으로 원하는 문서 생성
+접수대장 — Notion-style 테이블 + 우측 사이드 패널
+행 클릭 → 사건 상세 패널 열림 / 문서 출력 · 엑셀 내보내기
 """
 import streamlit as st
 import pandas as pd
@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from core.db import init_db, get_all_cases, update_case, get_case
+from core.db import init_db, get_all_cases, get_case, update_case
 from core.status_resolver import resolve_status, STATUS_COLORS
 from core.ui_styles import inject_css, page_header, status_badge
 from core.hwpx_handler import generate_hwpx
@@ -21,7 +21,14 @@ if "db_initialized" not in st.session_state:
     st.session_state["db_initialized"] = True
 
 inject_css()
-page_header("📂", "접수대장", "사건 조회 · 수정 · 문서 출력")
+page_header("📂", "접수대장", "사건 조회 · 문서 출력")
+
+STATUS_EMOJI = {
+    "접수": "🔵", "회신대기": "🟡", "회신임박": "🟠", "회신지연": "🔴",
+    "조정중지": "⚫", "불개시": "⚪", "개최예정": "🟢", "종결": "◻",
+    "조정성립": "✅", "조정불성립": "❌",
+}
+
 
 # ══════════════════════════════════════════════
 # 데이터 로드
@@ -53,352 +60,383 @@ def load_cases(year_sel, status_sel, type_sel, keyword):
         df = df[mask]
     return df
 
+
 # ══════════════════════════════════════════════
 # 필터 바
 # ══════════════════════════════════════════════
-st.markdown('<div class="card">', unsafe_allow_html=True)
 f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 1])
 cur_year = date.today().year
-year_opts = ["전체"] + [str(y) for y in range(cur_year, cur_year - 6, -1)]
+year_opts = ["전체"] + [str(y) for y in range(2050, 2025, -1)]
+type_opts = ["전체", "관리비", "하자", "소음·진동", "주차", "공용부분",
+             "층간소음", "관리단 운영", "선거·의결", "기타"]
+
 with f1:
-    year_sel = st.selectbox("연도", year_opts, label_visibility="collapsed")
+    default_year_idx = year_opts.index(str(cur_year)) if str(cur_year) in year_opts else 0
+    year_sel = st.selectbox("연도", year_opts, index=default_year_idx, label_visibility="collapsed")
 with f2:
-    status_sel = st.selectbox("진행상태", ["전체"] + list(STATUS_COLORS.keys()),
-                               label_visibility="collapsed")
+    status_sel = st.selectbox("상태", ["전체"] + list(STATUS_COLORS.keys()),
+                              label_visibility="collapsed")
 with f3:
-    type_opts = ["전체", "관리비", "하자", "소음·진동", "주차", "공용부분",
-                 "층간소음", "관리단 운영", "선거·의결", "기타"]
     type_sel = st.selectbox("분쟁유형", type_opts, label_visibility="collapsed")
 with f4:
-    keyword = st.text_input("검색", placeholder="접수번호·이름·건물명·지역",
-                             label_visibility="collapsed")
+    keyword = st.text_input("검색", placeholder="접수번호, 이름, 건물명...",
+                            label_visibility="collapsed")
 with f5:
-    if st.button("🔄", use_container_width=True, help="새로고침"):
+    st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
+    if st.button("↻", use_container_width=True, help="새로고침"):
         st.cache_data.clear()
         st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
 
 df = load_cases(year_sel, status_sel, type_sel, keyword)
 
 # ══════════════════════════════════════════════
-# 요약 KPI
+# KPI 요약 바
 # ══════════════════════════════════════════════
 if not df.empty:
     total   = len(df)
     closed  = len(df[df["진행상태"] == "종결"])
     overdue = len(df[df["진행상태"] == "회신지연"])
     urgent  = len(df[df["진행상태"] == "회신임박"])
-    st.markdown(f"""
-    <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
-        <div class="kpi-card" style="flex:1;min-width:110px;border-top-color:#1A56A0">
-            <div class="kpi-value">{total}</div><div class="kpi-label">조회 건수</div></div>
-        <div class="kpi-card" style="flex:1;min-width:110px;border-top-color:#27AE60">
-            <div class="kpi-value">{total - closed}</div><div class="kpi-label">진행 중</div></div>
-        <div class="kpi-card" style="flex:1;min-width:110px;border-top-color:#BDC3C7">
-            <div class="kpi-value">{closed}</div><div class="kpi-label">종결</div></div>
-        <div class="kpi-card" style="flex:1;min-width:110px;border-top-color:#E67E22">
-            <div class="kpi-value">{urgent}</div><div class="kpi-label">회신임박</div></div>
-        <div class="kpi-card" style="flex:1;min-width:110px;border-top-color:#E74C3C">
-            <div class="kpi-value">{overdue}</div><div class="kpi-label">회신지연</div></div>
-    </div>""", unsafe_allow_html=True)
+    active  = total - closed
+    st.markdown(
+        f'<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+        f'<div class="kpi-card" style="flex:1;min-width:90px;border-top-color:#0066CC">'
+        f'<div class="kpi-value">{total}</div><div class="kpi-label">전체</div></div>'
+        f'<div class="kpi-card" style="flex:1;min-width:90px;border-top-color:#059669">'
+        f'<div class="kpi-value">{active}</div><div class="kpi-label">진행 중</div></div>'
+        f'<div class="kpi-card" style="flex:1;min-width:90px;border-top-color:#94A3B8">'
+        f'<div class="kpi-value">{closed}</div><div class="kpi-label">종결</div></div>'
+        f'<div class="kpi-card" style="flex:1;min-width:90px;border-top-color:#F59E0B">'
+        f'<div class="kpi-value">{urgent}</div><div class="kpi-label">회신임박</div></div>'
+        f'<div class="kpi-card" style="flex:1;min-width:90px;border-top-color:#DC2626">'
+        f'<div class="kpi-value">{overdue}</div><div class="kpi-label">회신지연</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 if df.empty:
-    st.info("조건에 맞는 사건이 없습니다.")
+    st.markdown(
+        '<div class="card"><div class="empty-state">'
+        '<div class="empty-icon">🔍</div>'
+        '<div class="empty-title">조건에 맞는 사건이 없습니다</div>'
+        '<div class="empty-sub">필터 조건을 변경하거나 검색어를 확인해 보세요</div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
     st.stop()
 
+
 # ══════════════════════════════════════════════
-# 메인 테이블  (체크박스 1개)
+# 테이블 (전체 너비)
 # ══════════════════════════════════════════════
 st.markdown(
-    '<p style="font-size:0.82rem;color:#64748B;margin-bottom:6px;">'
-    '☑ 체크박스로 사건을 선택한 뒤 아래 버튼으로 원하는 문서를 출력하세요. '
-    '지역·건물명·신청인·피신청인·분쟁유형 셀은 직접 편집할 수 있습니다.'
-    '</p>',
+    '<p style="font-size:12px;color:#94A3B8;margin-bottom:6px">'
+    '☑ 체크박스로 사건을 선택하면 아래에 상세 정보와 문서 출력 버튼이 표시됩니다</p>',
     unsafe_allow_html=True,
 )
 
 SHOW_COLS = ["접수번호", "지역", "건물명", "신청인_성명", "피신청인_성명",
              "분쟁유형", "접수일자", "회신기한", "진행상태"]
-EDIT_COLS = ["지역", "건물명", "신청인_성명", "피신청인_성명", "분쟁유형"]
+df_disp = df[SHOW_COLS].copy()
+df_disp["진행상태"] = df_disp["진행상태"].map(lambda s: f"{STATUS_EMOJI.get(s,'•')} {s}")
 
-disp = df[SHOW_COLS].copy()
-sel_set = st.session_state.get("sel_cases", set())
-disp.insert(0, "선택", disp["접수번호"].isin(sel_set))
+selected_id = st.session_state.get("selected_case_id")
+df_disp.insert(0, "선택", df_disp["접수번호"] == selected_id)
 
 edited = st.data_editor(
-    disp,
+    df_disp,
     use_container_width=True,
     hide_index=True,
-    height=min(80 + len(disp) * 35, 600),
+    height=min(80 + len(df_disp) * 35, 520),
     column_config={
-        "선택":         st.column_config.CheckboxColumn("선택", width="small"),
-        "접수번호":     st.column_config.TextColumn("접수번호",  width="medium"),
-        "지역":         st.column_config.TextColumn("지역",      width="medium"),
-        "건물명":       st.column_config.TextColumn("건물명",    width="medium"),
-        "신청인_성명":  st.column_config.TextColumn("신청인",    width="medium"),
-        "피신청인_성명":st.column_config.TextColumn("피신청인",  width="medium"),
-        "분쟁유형":     st.column_config.TextColumn("분쟁유형",  width="small"),
-        "접수일자":     st.column_config.DateColumn("접수일자",  width="small", format="YYYY-MM-DD"),
-        "회신기한":     st.column_config.DateColumn("회신기한",  width="small", format="YYYY-MM-DD"),
-        "진행상태":     st.column_config.TextColumn("진행상태",  width="small"),
+        "선택":          st.column_config.CheckboxColumn("선택",    width="small"),
+        "접수번호":      st.column_config.TextColumn("접수번호",    width="medium"),
+        "지역":          st.column_config.TextColumn("지역",        width="small"),
+        "건물명":        st.column_config.TextColumn("건물명",      width="medium"),
+        "신청인_성명":   st.column_config.TextColumn("신청인",      width="small"),
+        "피신청인_성명": st.column_config.TextColumn("피신청인",    width="small"),
+        "분쟁유형":      st.column_config.TextColumn("유형",        width="small"),
+        "접수일자":      st.column_config.DateColumn("접수일자",    width="small", format="YY-MM-DD"),
+        "회신기한":      st.column_config.DateColumn("회신기한",    width="small", format="YY-MM-DD"),
+        "진행상태":      st.column_config.TextColumn("상태",        width="small"),
     },
-    disabled=["접수번호", "접수일자", "회신기한", "진행상태"],
+    disabled=["접수번호", "지역", "건물명", "신청인_성명", "피신청인_성명",
+              "분쟁유형", "접수일자", "회신기한", "진행상태"],
     key="case_table",
 )
 
-# 선택 상태 갱신
-st.session_state["sel_cases"] = set(
-    edited.loc[edited["선택"] == True, "접수번호"].tolist()
-)
-
-# 인라인 수정 감지 → DB 저장
-changed = []
-for _, row in edited.iterrows():
-    orig = df[df["접수번호"] == row["접수번호"]]
-    if orig.empty:
-        continue
-    diff = {c: row[c] for c in EDIT_COLS if str(row.get(c,"")) != str(orig.iloc[0].get(c,""))}
-    if diff:
-        changed.append((row["접수번호"], diff))
-
-if changed:
-    for 번호, diff in changed:
-        diff["진행상태"] = resolve_status({**dict(df[df["접수번호"]==번호].iloc[0]), **diff})
-        update_case(번호, diff)
-    st.cache_data.clear()
-    st.toast(f"{len(changed)}건 수정 저장됨", icon="💾")
+checked = edited.loc[edited["선택"] == True, "접수번호"].tolist()
+if len(checked) == 1:
+    new_id = checked[0]
+    if new_id != selected_id:
+        st.session_state["selected_case_id"] = new_id
+        st.rerun()
+elif len(checked) == 0 and selected_id:
+    st.session_state.pop("selected_case_id", None)
+    st.rerun()
+elif len(checked) > 1:
+    new_id = [c for c in checked if c != selected_id]
+    new_id = new_id[-1] if new_id else checked[-1]
+    st.session_state["selected_case_id"] = new_id
+    st.rerun()
 
 # ══════════════════════════════════════════════
-# 하단 문서 출력 버튼
+# 하단 액션 영역 (선택된 사건)
 # ══════════════════════════════════════════════
-sel_list = sorted(st.session_state.get("sel_cases", set()))
-n = len(sel_list)
-disabled = (n == 0)
+selected_id = st.session_state.get("selected_case_id")
 
-st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
-st.markdown('<div class="card">', unsafe_allow_html=True)
-
-# 선택 현황
-if sel_list:
-    badges = "".join(
-        f'<span style="background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;'
-        f'padding:2px 8px;border-radius:12px;font-size:0.8rem;margin:2px;">{n}</span>'
-        for n in sel_list[:10]
-    )
+if not selected_id:
     st.markdown(
-        f'<div style="margin-bottom:10px;font-size:0.85rem;">'
-        f'<b>선택된 사건 {n}건</b>: {badges}'
-        f'{"…" if len(sel_list) > 10 else ""}</div>',
+        '<div style="margin-top:10px;padding:20px 24px;background:#F8FAFC;border:1px dashed #CBD5E1;'
+        'border-radius:10px;text-align:center;color:#94A3B8;font-size:13px">'
+        '☑ 위 목록에서 사건을 선택하면 수정·상세보기·문서 출력 버튼이 표시됩니다'
+        '</div>',
         unsafe_allow_html=True,
     )
 else:
-    st.markdown(
-        '<p style="color:#94A3B8;font-size:0.85rem;margin-bottom:10px;">'
-        '위 표에서 사건을 선택하면 버튼이 활성화됩니다.</p>',
-        unsafe_allow_html=True,
-    )
+    case = get_case(selected_id)
+    if case is None:
+        st.error(f"{selected_id} 사건을 찾을 수 없습니다.")
+    else:
+        case = dict(case)
+        status = resolve_status(case)
+        badge_html = status_badge(status)
 
-# 1건 선택 시 수정/상세 바로가기
-if n == 1:
-    qa, qb = st.columns(2)
-    with qa:
-        if st.button("✏️ 수정하기", use_container_width=True, type="primary"):
-            st.session_state["edit_case"] = sel_list[0]
-            # 이전 폼 캐시 제거 후 이동
-            for k in list(st.session_state.keys()):
-                if k.startswith("_form_ready_") or k.startswith("inp_"):
-                    del st.session_state[k]
-            st.switch_page("pages/2_신규접수.py")
-    with qb:
-        if st.button("🔎 상세보기", use_container_width=True):
-            st.session_state["detail_case"] = sel_list[0]
-            st.switch_page("pages/4_사건상세.py")
+        today_str = date.today().isoformat()
+        dl = case.get("회신기한") or ""
+        if dl and dl < today_str:
+            dl_color = "#DC2626"
+            dl_label = f"{dl} · 기한 초과"
+        elif dl:
+            remain = (date.fromisoformat(dl) - date.today()).days
+            dl_color = "#C25700" if remain <= 3 else "#334155"
+            dl_label = f"{dl} · D-{remain}"
+        else:
+            dl_color = "#94A3B8"
+            dl_label = "미정"
 
-def _hwpx_buttons(label, template, prefix, key_prefix):
-    """hwpx 생성 + 다운로드 버튼 공통 로직"""
-    if st.button(label, use_container_width=True, disabled=disabled):
-        cases_data = [dict(get_case(num)) for num in sel_list if get_case(num)]
-        ok, fail = [], []
-        for case in cases_data:
-            num = case["접수번호"]
-            try:
-                out = generate_hwpx(template, case, f"{prefix}_{num}.hwpx")
-                ok.append((num, out))
-            except Exception as e:
-                fail.append(f"{num}({e})")
-        if ok:
-            st.success(f"{len(ok)}건 생성 완료")
-            for num, path in ok:
-                with open(path, "rb") as f:
-                    st.download_button(
-                        f"⬇ {num} 다운로드",
-                        f,
-                        file_name=path.name,
-                        mime="application/octet-stream",
-                        key=f"{key_prefix}_{num}",
-                    )
-        if fail:
-            st.error(f"실패: {', '.join(fail)}")
+        # ── 선택 사건 요약 헤더
+        st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="card" style="padding:14px 20px">'
+            f'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+            f'<span style="font-size:1rem;font-weight:700;color:#0F172A">{case["접수번호"]}</span>'
+            f'{badge_html}'
+            f'<span style="color:#64748B;font-size:13px">{case.get("건물명") or ""}  ·  {case["지역"]}</span>'
+            f'<span style="color:#334155;font-size:13px">'
+            f'<b>신청인</b> {case["신청인_성명"]} &nbsp;<b>피신청인</b> {case["피신청인_성명"]}</span>'
+            f'<span style="font-size:13px;color:{dl_color};margin-left:auto">회신기한 {dl_label}</span>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
+        # ── 버튼 2행
 
-# 버튼 2줄
-r1c1, r1c2, r1c3, r1c4 = st.columns(4)
-with r1c1:
-    if st.button("📮 우편모아 엑셀", use_container_width=True, disabled=disabled):
-        cases_data = [dict(get_case(num)) for num in sel_list if get_case(num)]
-        try:
-            out = generate_woopyeonmoa(cases_data)
-            st.success(f"{len(cases_data)}건 생성 완료")
-            with open(out, "rb") as f:
-                st.download_button("⬇ 우편모아 다운로드", f,
-                                   file_name=out.name,
-                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                   key="dl_woopyon")
-        except Exception as e:
-            st.error(str(e))
-with r1c2:
-    if st.button("🏷️ 라벨텍 엑셀", use_container_width=True, disabled=disabled):
-        cases_data = [dict(get_case(num)) for num in sel_list if get_case(num)]
-        try:
-            out = generate_labeltek(cases_data)
-            st.success(f"{len(cases_data)}건 생성 완료")
-            with open(out, "rb") as f:
-                st.download_button("⬇ 라벨텍 다운로드", f,
-                                   file_name=out.name,
-                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                   key="dl_labeltek")
-        except Exception as e:
-            st.error(str(e))
-with r1c3:
-    _hwpx_buttons("📄 피신청인 통지 공문",
-                  "1. 피신청인_통지_공문.hwpx",
-                  "피신청인_통지공문", "dl_notice")
-with r1c4:
-    if st.button("🗂️ 사건자료 폴더 열기", use_container_width=True, disabled=(n != 1)):
-        if sel_list:
-            import subprocess
-            folder = Path(__file__).parent.parent / "output" / "사건자료" / sel_list[0]
-            folder.mkdir(parents=True, exist_ok=True)
-            subprocess.Popen(f'explorer "{folder}"')
+        # 1행: 이동 버튼
+        nav1, nav2, nav3, nav4 = st.columns(4)
+        with nav1:
+            if st.button("✏️ 수정하기", use_container_width=True, type="primary", key="act_edit"):
+                st.session_state["edit_case"] = selected_id
+                st.session_state["_edit_origin"] = "pages/3_접수대장.py"
+                for k in list(st.session_state.keys()):
+                    if k.startswith("_form_ready_") or k.startswith("inp_"):
+                        del st.session_state[k]
+                st.switch_page("pages/2_신규접수.py")
+        with nav2:
+            if st.button("🔎 상세보기", use_container_width=True, key="act_detail"):
+                st.session_state["detail_case"] = selected_id
+                st.switch_page("pages/4_사건상세.py")
+        with nav3:
+            if st.button("🗂️ 사건자료 폴더", use_container_width=True, key="act_folder"):
+                import subprocess
+                folder = Path(__file__).parent.parent / "output" / "사건자료" / selected_id
+                folder.mkdir(parents=True, exist_ok=True)
+                subprocess.Popen(f'explorer "{folder}"')
+        with nav4:
+            pass  # 여백
 
-r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-with r2c1:
-    _hwpx_buttons("🚫 조정중지 공문",
-                  "2. 조정중지 공문.hwpx",
-                  "조정중지_공문", "dl_stop")
-with r2c2:
-    _hwpx_buttons("📋 조정중지 통보서",
-                  "3. 조정중지 통보서.hwpx",
-                  "조정중지_통보서", "dl_stopnotice")
-with r2c3:
-    _hwpx_buttons("🚫 불개시 공문",
-                  "5. 조정불개시_ 공문.hwpx",
-                  "조정불개시_공문", "dl_reject")
-with r2c4:
-    _hwpx_buttons("📋 불개시 통보서",
-                  "4. 조정불개시_통보서.hwpx",
-                  "조정불개시_통보서", "dl_rejectnotice")
+        st.markdown('<hr style="margin:12px 0">', unsafe_allow_html=True)
 
-if sel_list:
-    if st.button("☐ 선택 초기화", use_container_width=True):
-        st.session_state["sel_cases"] = set()
-        st.rerun()
+        # 2행: 문서 출력
+        def _gen_hwpx(label: str, template: str, prefix: str, btn_key: str):
+            if st.button(label, use_container_width=True, key=btn_key):
+                cdata = dict(get_case(selected_id))
+                try:
+                    out = generate_hwpx(template, cdata, f"{prefix}_{selected_id}.hwpx")
+                    with open(out, "rb") as f:
+                        st.download_button(
+                            f"⬇ {selected_id} 다운로드", f,
+                            file_name=out.name,
+                            mime="application/octet-stream",
+                            key=f"dl_{btn_key}",
+                        )
+                except Exception as e:
+                    st.error(str(e))
 
-st.markdown('</div>', unsafe_allow_html=True)
+        d1, d2, d3, d4 = st.columns(4)
+        with d1:
+            _gen_hwpx("📄 피신청인 통지 공문", "1. 피신청인_통지_공문.hwpx",
+                      "피신청인_통지공문", "gen_notice")
+        with d2:
+            _gen_hwpx("🚫 조정중지 공문", "2. 조정중지 공문.hwpx",
+                      "조정중지_공문", "gen_stop")
+        with d3:
+            _gen_hwpx("📋 조정중지 통보서", "3. 조정중지 통보서.hwpx",
+                      "조정중지_통보서", "gen_stop2")
+        with d4:
+            pass
+
+        d5, d6, d7, d8 = st.columns(4)
+        with d5:
+            _gen_hwpx("🚫 불개시 공문", "5. 조정불개시_ 공문.hwpx",
+                      "조정불개시_공문", "gen_rej")
+        with d6:
+            _gen_hwpx("📋 불개시 통보서", "4. 조정불개시_통보서.hwpx",
+                      "조정불개시_통보서", "gen_rej2")
+        with d7:
+            if st.button("📮 우편모아 엑셀", use_container_width=True, key="gen_wp"):
+                try:
+                    out = generate_woopyeonmoa([dict(get_case(selected_id))])
+                    with open(out, "rb") as f:
+                        st.download_button("⬇ 우편모아 다운로드", f, file_name=out.name,
+                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                           key="dl_wp")
+                except Exception as e:
+                    st.error(str(e))
+        with d8:
+            if st.button("🏷️ 라벨텍 엑셀", use_container_width=True, key="gen_lb"):
+                try:
+                    out = generate_labeltek([dict(get_case(selected_id))])
+                    with open(out, "rb") as f:
+                        st.download_button("⬇ 라벨텍 다운로드", f, file_name=out.name,
+                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                           key="dl_lb")
+                except Exception as e:
+                    st.error(str(e))
+
+        # ── 빠른 상태 변경
+        st.markdown('<hr style="margin:14px 0 10px">', unsafe_allow_html=True)
+        qs1, qs2, qs3 = st.columns([3, 2, 1])
+        with qs1:
+            quick_status = st.selectbox(
+                "빠른 상태 변경",
+                ["", "종결", "조정성립", "조정불성립", "조정중지", "불개시"],
+                label_visibility="collapsed",
+                placeholder="⚡ 빠른 상태 변경...",
+                key="quick_status_sel",
+            )
+        with qs2:
+            st.markdown(
+                f'<div style="padding-top:6px;font-size:12px;color:#64748B">'
+                f'현재: <b>{status}</b></div>',
+                unsafe_allow_html=True,
+            )
+        with qs3:
+            apply_clicked = st.button(
+                "적용", key="quick_status_apply",
+                disabled=not quick_status, use_container_width=True,
+            )
+
+        if apply_clicked and quick_status:
+            st.session_state["_confirm_status_change"] = quick_status
+
+        if st.session_state.get("_confirm_status_change"):
+            target = st.session_state["_confirm_status_change"]
+            STATUS_FIELD_MAP = {
+                "종결":       {"결과": "종결",       "종결일자": date.today().isoformat()},
+                "조정성립":   {"결과": "조정성립",   "종결일자": date.today().isoformat()},
+                "조정불성립": {"결과": "조정불성립", "종결일자": date.today().isoformat()},
+                "조정중지":   {"조정동의여부": "부동의"},
+                "불개시":     {"개최여부": "불개시"},
+            }
+            fields = STATUS_FIELD_MAP.get(target, {})
+            st.warning(f"**{selected_id}** 상태를 **{target}** 으로 변경합니다. 계속하시겠습니까?")
+            cc1, cc2, _ = st.columns([1, 1, 4])
+            with cc1:
+                if st.button("✅ 확인", key="confirm_qs_yes", type="primary", use_container_width=True):
+                    update_case(selected_id, fields)
+                    st.session_state.pop("_confirm_status_change", None)
+                    st.cache_data.clear()
+                    st.toast(f"{selected_id} → {target} 변경 완료", icon="✅")
+                    st.rerun()
+            with cc2:
+                if st.button("✕ 취소", key="confirm_qs_no", use_container_width=True):
+                    st.session_state.pop("_confirm_status_change", None)
+                    st.rerun()
+
 
 # ══════════════════════════════════════════════
 # 엑셀 내보내기
 # ══════════════════════════════════════════════
-st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown("#### 📤 엑셀 내보내기")
-
-ex1, ex2 = st.columns(2)
-with ex1:
-    export_scope = st.radio(
-        "내보낼 범위",
-        ["현재 필터 결과", "전체 (연도 무관)"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-
-if st.button("📥 엑셀 다운로드", type="primary"):
-    import io, openpyxl
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-
-    if export_scope == "현재 필터 결과":
-        if not df.empty and "접수번호" in df.columns:
-            full_rows = [dict(get_case(no)) for no in df["접수번호"] if get_case(no)]
-        else:
-            full_rows = []
-    else:
-        full_rows = [dict(r) for r in get_all_cases()]
-
-    if not full_rows:
-        st.warning("내보낼 데이터가 없습니다.")
-    else:
-        wb  = openpyxl.Workbook()
-        ws  = wb.active
-        ws.title = "접수대장"
-
-        COLS = [
-            ("접수번호",       "접수번호"),
-            ("접수연도",       "접수연도"),
-            ("접수일자",       "접수일자"),
-            ("지역",           "지역"),
-            ("분쟁유형",       "분쟁유형"),
-            ("건물명",         "건물명"),
-            ("건물소재지",     "건물소재지"),
-            ("신청인_성명",    "신청인 성명"),
-            ("신청인_지위",    "신청인 지위"),
-            ("신청인_주소",    "신청인 주소"),
-            ("신청인_우편번호","신청인 우편번호"),
-            ("신청인_연락처",  "신청인 연락처"),
-            ("피신청인_성명",  "피신청인 성명"),
-            ("피신청인_지위",  "피신청인 지위"),
-            ("피신청인_주소",  "피신청인 주소"),
-            ("피신청인_우편번호","피신청인 우편번호"),
-            ("피신청인_연락처","피신청인 연락처"),
-            ("안내도달일",     "안내도달일"),
-            ("회신기한",       "회신기한"),
-            ("회신접수일",     "회신접수일"),
-            ("조정동의여부",   "조정동의여부"),
-            ("개최여부",       "개최여부"),
-            ("결과",           "결과"),
-            ("종결일자",       "종결일자"),
-        ]
-
-        thin   = Side(style="thin")
-        BORDER = Border(left=thin, right=thin, top=thin, bottom=thin)
-        CENTER = Alignment(horizontal="center", vertical="center")
-
-        for c_idx, (_, label) in enumerate(COLS, 1):
-            cell = ws.cell(row=1, column=c_idx, value=label)
-            cell.fill      = PatternFill("solid", fgColor="1A56A0")
-            cell.font      = Font(bold=True, color="FFFFFF")
-            cell.alignment = CENTER
-            cell.border    = BORDER
-
-        for r_idx, row in enumerate(full_rows, 2):
-            for c_idx, (field, _) in enumerate(COLS, 1):
-                cell = ws.cell(row=r_idx, column=c_idx, value=row.get(field, "") or "")
-                cell.alignment = Alignment(vertical="center")
-                cell.border    = BORDER
-
-        for c_idx, (_, label) in enumerate(COLS, 1):
-            ws.column_dimensions[openpyxl.utils.get_column_letter(c_idx)].width = max(len(label)+3, 12)
-        ws.freeze_panes = "A2"
-
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
-        fname = f"접수대장_{date.today()}.xlsx"
-        st.success(f"✅ {len(full_rows)}건")
-        st.download_button(
-            "⬇️ 다운로드",
-            data=buf.read(),
-            file_name=fname,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+with st.expander("📤  엑셀 내보내기"):
+    scope_col, _ = st.columns([3, 2])
+    with scope_col:
+        export_scope = st.radio(
+            "범위",
+            ["현재 필터 결과", "전체 (연도 무관)"],
+            horizontal=True,
+            label_visibility="collapsed",
         )
 
-st.markdown('</div>', unsafe_allow_html=True)
+    if st.button("📥 엑셀 다운로드", type="primary"):
+        import io, openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+        if export_scope == "현재 필터 결과":
+            full_rows = [dict(get_case(no)) for no in df["접수번호"] if get_case(no)] if not df.empty else []
+        else:
+            full_rows = [dict(r) for r in get_all_cases()]
+
+        if not full_rows:
+            st.warning("내보낼 데이터가 없습니다.")
+        else:
+            COLS = [
+                ("접수번호", "접수번호"), ("접수연도", "접수연도"), ("접수일자", "접수일자"),
+                ("지역", "지역"), ("분쟁유형", "분쟁유형"), ("건물명", "건물명"),
+                ("건물소재지", "건물소재지"), ("신청인_성명", "신청인 성명"),
+                ("신청인_지위", "신청인 지위"), ("신청인_주소", "신청인 주소"),
+                ("신청인_우편번호", "신청인 우편번호"), ("신청인_연락처", "신청인 연락처"),
+                ("피신청인_성명", "피신청인 성명"), ("피신청인_지위", "피신청인 지위"),
+                ("피신청인_주소", "피신청인 주소"), ("피신청인_우편번호", "피신청인 우편번호"),
+                ("피신청인_연락처", "피신청인 연락처"), ("안내도달일", "안내도달일"),
+                ("회신기한", "회신기한"), ("회신접수일", "회신접수일"),
+                ("조정동의여부", "조정동의여부"), ("개최여부", "개최여부"),
+                ("결과", "결과"), ("종결일자", "종결일자"),
+            ]
+            thin = Side(style="thin")
+            BORDER = Border(left=thin, right=thin, top=thin, bottom=thin)
+            CENTER = Alignment(horizontal="center", vertical="center")
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "접수대장"
+
+            for c_idx, (_, label) in enumerate(COLS, 1):
+                cell = ws.cell(row=1, column=c_idx, value=label)
+                cell.fill = PatternFill("solid", fgColor="0066CC")
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.alignment = CENTER
+                cell.border = BORDER
+
+            for r_idx, row in enumerate(full_rows, 2):
+                for c_idx, (field, _) in enumerate(COLS, 1):
+                    cell = ws.cell(row=r_idx, column=c_idx, value=row.get(field, "") or "")
+                    cell.alignment = Alignment(vertical="center")
+                    cell.border = BORDER
+
+            for c_idx, (_, label) in enumerate(COLS, 1):
+                ws.column_dimensions[openpyxl.utils.get_column_letter(c_idx)].width = max(len(label) + 3, 12)
+            ws.freeze_panes = "A2"
+
+            buf = io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            st.success(f"{len(full_rows)}건 준비 완료")
+            st.download_button(
+                "⬇️ 다운로드",
+                data=buf.read(),
+                file_name=f"접수대장_{date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )

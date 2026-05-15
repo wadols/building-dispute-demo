@@ -208,7 +208,7 @@ def parse_application_pdf(file_bytes: bytes) -> tuple[dict, str]:
         r["건물소재지"] = loc
         city_m = re.search(r'경기도\s+(\S+시|\S+군)', loc)
         if city_m:
-            r["지역"] = f"경기도 {city_m.group(1)}"
+            r["지역"] = city_m.group(1)
         elif loc:
             r["지역"] = loc[:30]
 
@@ -216,7 +216,7 @@ def parse_application_pdf(file_bytes: bytes) -> tuple[dict, str]:
     if not r.get("지역") and r.get("신청인_주소"):
         city_m = re.search(r'경기도\s+(\S+시|\S+군)', r["신청인_주소"])
         if city_m:
-            r["지역"] = f"경기도 {city_m.group(1)}"
+            r["지역"] = city_m.group(1)
 
     # ── 신청내용
     m = re.search(r'조정신청\s*내용\s+(.+?)(?=조정을\s*신청하는|피해예상금액)', text, re.DOTALL)

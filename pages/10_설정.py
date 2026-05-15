@@ -76,7 +76,19 @@ with tab_db:
 
 # ───── 백업·복원 탭 ─────
 with tab_backup:
-    st.markdown("#### DB 백업")
+    st.markdown("#### 현재 DB 다운로드")
+    if DB_PATH.exists():
+        with open(DB_PATH, "rb") as _f:
+            st.download_button(
+                "⬇️ cases.db 바로 다운로드",
+                data=_f.read(),
+                file_name=f"cases_{datetime.now().strftime('%Y%m%d')}.db",
+                mime="application/octet-stream",
+                use_container_width=True,
+                type="primary",
+            )
+    st.markdown("---")
+    st.markdown("#### DB 백업 (서버 저장)")
     if st.button("💾 지금 백업"):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         dst = BACKUP_DIR / f"cases_{ts}.db"

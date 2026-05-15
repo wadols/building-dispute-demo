@@ -15,15 +15,16 @@ st.set_page_config(
 # 사건상세는 등록하되 CSS로 사이드바에서 숨김
 pg = st.navigation(
     [
-        st.Page("pages/1_홈.py",             title="홈",           icon="🏠"),
-        st.Page("pages/2_신규접수.py",       title="신규접수",     icon="📋"),
-        st.Page("pages/3_접수대장.py",       title="접수대장",     icon="📂"),
-        st.Page("pages/4_사건상세.py",       title="사건상세",     icon="🔎"),
-        st.Page("pages/5_위원관리.py",       title="위원관리",     icon="👥"),
-        st.Page("pages/6_위원회개최.py",     title="위원회개최",   icon="🏛️"),
-        st.Page("pages/7_메모통합검색.py", title="메모검색", icon="🔍"),
-        st.Page("pages/8_보고서.py",      title="보고서",   icon="📊"),
-        st.Page("pages/10_설정.py",       title="설정",     icon="⚙️"),
+        st.Page("pages/1_홈.py",             title="홈",         icon="🏠"),
+        st.Page("pages/2_신규접수.py",       title="신규접수",   icon="📋"),
+        st.Page("pages/3_접수대장.py",       title="접수대장",   icon="📂"),
+        st.Page("pages/4_사건상세.py",       title="사건상세",   icon="🔎"),
+        st.Page("pages/11_캘린더.py",        title="캘린더",     icon="📅"),
+        st.Page("pages/8_보고서.py",         title="보고서",     icon="📊"),
+        st.Page("pages/6_위원회개최.py",     title="위원회개최", icon="🏛️"),
+        st.Page("pages/5_위원관리.py",       title="위원관리",   icon="👥"),
+        st.Page("pages/7_메모통합검색.py",   title="메모검색",   icon="🔍"),
+        st.Page("pages/10_설정.py",          title="설정",       icon="⚙️"),
     ],
     position="sidebar",
 )

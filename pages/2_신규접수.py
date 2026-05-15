@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import init_db, create_case, case_exists, next_case_number, get_case, update_case
 from core.status_resolver import resolve_status
-from core.ui_styles import inject_css, page_header, status_badge
+from core.ui_styles import inject_css, page_header, status_badge, section_header
 from core.address_search import address_search_widget
 
 st.set_page_config(page_title="신규 접수", page_icon="📋", layout="wide")
@@ -29,18 +29,7 @@ if "edit_case" in st.session_state:
     st.session_state["_active_edit"] = st.session_state.pop("edit_case")
 
 _active_edit = st.session_state.get("_active_edit")
-
-st.sidebar.markdown("### ⚙️ 옵션")
-if _active_edit:
-    # 수정 모드 고정 — 라디오 숨기고 안내만 표시
-    mode = "기존 사건 수정"
-    st.sidebar.info(f"수정 중: **{_active_edit}**")
-    if st.sidebar.button("✖ 신규 접수로 전환"):
-        del st.session_state["_active_edit"]
-        st.rerun()
-else:
-    mode = st.sidebar.radio("작업 모드", ["신규 접수", "기존 사건 수정"],
-                            index=0, label_visibility="collapsed")
+mode = "기존 사건 수정" if _active_edit else "신규 접수"
 
 existing = None
 if mode == "기존 사건 수정":
@@ -227,115 +216,96 @@ with tab_single:
     # ══════════════════════════════════════════════
     # ① 사건 기본 정보
     # ══════════════════════════════════════════════
-    st.markdown('<div class="card"><div class="card-title">① 사건 기본 정보</div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([2, 2, 2])
-    with c1:
-        st.text_input("접수번호 *", key="inp_접수번호", help="자동 생성 — 필요시 수정 가능")
-    with c2:
-        st.date_input("접수일자 *", key="inp_접수일자")
-    with c3:
-        st.text_input("지역 *", key="inp_지역", placeholder="예: 수원시 영통구")
+    with st.container(border=True):
+        section_header("①", "사건 기본 정보")
+        c1, c2, c3 = st.columns([2, 2, 2])
+        with c1:
+            st.text_input("접수번호 *", key="inp_접수번호", help="자동 생성 — 필요시 수정 가능")
+        with c2:
+            st.date_input("접수일자 *", key="inp_접수일자")
+        with c3:
+            st.text_input("지역 *", key="inp_지역", placeholder="예: 수원시 영통구")
+        분쟁유형_opts = ["", "관리비", "하자", "소음·진동", "주차", "공용부분", "층간소음", "관리단 운영", "선거·의결", "기타"]
+        c4, c5 = st.columns([2, 4])
+        with c4:
+            st.selectbox("분쟁유형", 분쟁유형_opts, key="inp_분쟁유형")
+        with c5:
+            st.text_area("신청내용", key="inp_신청내용", height=72)
 
-    분쟁유형_opts = ["", "관리비", "하자", "소음·진동", "주차", "공용부분", "층간소음", "관리단 운영", "선거·의결", "기타"]
-    c4, c5 = st.columns([2, 4])
-    with c4:
-        st.selectbox("분쟁유형", 분쟁유형_opts, key="inp_분쟁유형")
-    with c5:
-        st.text_area("신청내용", key="inp_신청내용", height=72)
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        section_header("②", "건물 정보")
+        b1, b2, b3 = st.columns([2, 3, 2])
+        용도_opts = ["", "아파트", "연립주택", "다세대주택", "오피스텔", "상가", "복합건물", "기타"]
+        with b1:
+            st.text_input("건물명", key="inp_건물명", placeholder="예: 행복아파트")
+        with b2:
+            st.text_input("건물소재지", key="inp_건물소재지")
+        with b3:
+            st.selectbox("건축물용도", 용도_opts, key="inp_건축물용도")
 
-    # ══════════════════════════════════════════════
-    # ② 건물 정보
-    # ══════════════════════════════════════════════
-    st.markdown('<div class="card"><div class="card-title">② 건물 정보</div>', unsafe_allow_html=True)
-    b1, b2, b3 = st.columns([2, 3, 2])
-    용도_opts = ["", "아파트", "연립주택", "다세대주택", "오피스텔", "상가", "복합건물", "기타"]
-    with b1:
-        st.text_input("건물명", key="inp_건물명", placeholder="예: 행복아파트")
-    with b2:
-        st.text_input("건물소재지", key="inp_건물소재지")
-    with b3:
-        st.selectbox("건축물용도", 용도_opts, key="inp_건축물용도")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════
-    # ③ 신청인 / ④ 피신청인 (2열)
-    # ══════════════════════════════════════════════
     col_ap, col_rp = st.columns(2)
 
-    # ── 신청인
     with col_ap:
-        st.markdown('<div class="card"><div class="card-title">③ 신청인 정보</div>', unsafe_allow_html=True)
-        st.text_input("성명 *", key="inp_신청인_성명")
-        st.text_input("지위", key="inp_신청인_지위", placeholder="예: 구분소유자, 임차인 등 자유 입력")
-        st.text_input("연락처", key="inp_신청인_연락처", placeholder="010-0000-0000")
+        with st.container(border=True):
+            section_header("③", "신청인 정보")
+            st.text_input("성명 *", key="inp_신청인_성명")
+            st.text_input("지위", key="inp_신청인_지위", placeholder="예: 구분소유자, 임차인 등 자유 입력")
+            st.text_input("연락처", key="inp_신청인_연락처", placeholder="010-0000-0000")
+            if st.button("🔍 주소 검색 (다음)", key="btn_ap_search", use_container_width=True):
+                st.session_state["show_ap_search"] = not st.session_state.get("show_ap_search", False)
+            if st.session_state.get("show_ap_search", False):
+                ap_result = address_search_widget(key="ap_addr_search")
+                apply_addr(ap_result,
+                           addr_key="inp_신청인_주소", zip_key="inp_신청인_우편번호",
+                           show_key="show_ap_search")
+            st.text_input("주소 *", key="inp_신청인_주소")
+            st.text_input("우편번호", key="inp_신청인_우편번호", max_chars=6)
 
-        # 주소 검색 버튼
-        if st.button("🔍 주소 검색 (다음)", key="btn_ap_search", use_container_width=True):
-            st.session_state["show_ap_search"] = not st.session_state.get("show_ap_search", False)
-
-        # 주소 검색 위젯 (버튼 클릭 시 토글)
-        if st.session_state.get("show_ap_search", False):
-            ap_result = address_search_widget(key="ap_addr_search")
-            apply_addr(ap_result,
-                       addr_key="inp_신청인_주소", zip_key="inp_신청인_우편번호",
-                       show_key="show_ap_search")
-
-        st.text_input("주소 *", key="inp_신청인_주소")
-        st.text_input("우편번호", key="inp_신청인_우편번호", max_chars=6)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ── 피신청인
     with col_rp:
-        st.markdown('<div class="card"><div class="card-title">④ 피신청인 정보</div>', unsafe_allow_html=True)
-        st.text_input("성명 *", key="inp_피신청인_성명")
-        st.text_input("지위", key="inp_피신청인_지위", placeholder="예: 관리단, 입주자대표회의 등 자유 입력")
-        st.text_input("연락처", key="inp_피신청인_연락처", placeholder="010-0000-0000")
-
-        if st.button("🔍 주소 검색 (다음)", key="btn_rp_search", use_container_width=True):
-            st.session_state["show_rp_search"] = not st.session_state.get("show_rp_search", False)
-
-        if st.session_state.get("show_rp_search", False):
-            rp_result = address_search_widget(key="rp_addr_search")
-            apply_addr(rp_result,
-                       addr_key="inp_피신청인_주소", zip_key="inp_피신청인_우편번호",
-                       show_key="show_rp_search")
-
-        st.text_input("주소 *", key="inp_피신청인_주소")
-        st.text_input("우편번호", key="inp_피신청인_우편번호", max_chars=6)
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            section_header("④", "피신청인 정보")
+            st.text_input("성명 *", key="inp_피신청인_성명")
+            st.text_input("지위", key="inp_피신청인_지위", placeholder="예: 관리단, 입주자대표회의 등 자유 입력")
+            st.text_input("연락처", key="inp_피신청인_연락처", placeholder="010-0000-0000")
+            if st.button("🔍 주소 검색 (다음)", key="btn_rp_search", use_container_width=True):
+                st.session_state["show_rp_search"] = not st.session_state.get("show_rp_search", False)
+            if st.session_state.get("show_rp_search", False):
+                rp_result = address_search_widget(key="rp_addr_search")
+                apply_addr(rp_result,
+                           addr_key="inp_피신청인_주소", zip_key="inp_피신청인_우편번호",
+                           show_key="show_rp_search")
+            st.text_input("주소 *", key="inp_피신청인_주소")
+            st.text_input("우편번호", key="inp_피신청인_우편번호", max_chars=6)
 
     # ══════════════════════════════════════════════
     # ⑤ 진행 정보
     # ══════════════════════════════════════════════
-    st.markdown('<div class="card"><div class="card-title">⑤ 진행 정보</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        section_header("⑤", "진행 정보")
+        d1, d2, d3 = st.columns([2, 1, 2])
+        with d1:
+            st.date_input("안내도달일", key="inp_안내도달일")
+        with d2:
+            deadline_days = st.number_input("회신기한 (일)", min_value=1, max_value=60, value=7)
+        with d3:
+            안내도달일_val = st.session_state.get("inp_안내도달일")
+            if isinstance(안내도달일_val, date):
+                auto_dl = 안내도달일_val + timedelta(days=int(deadline_days))
+                if st.session_state.get("inp_회신기한") != auto_dl:
+                    st.session_state["inp_회신기한"] = auto_dl
+            st.date_input("회신기한 ✦자동", key="inp_회신기한")
 
-    d1, d2, d3 = st.columns([2, 1, 2])
-    with d1:
-        st.date_input("안내도달일", key="inp_안내도달일")
-    with d2:
-        deadline_days = st.number_input("회신기한 (일)", min_value=1, max_value=60, value=7)
-    with d3:
-        # 안내도달일 변경 시 회신기한 자동 계산
-        안내도달일_val = st.session_state.get("inp_안내도달일")
-        if isinstance(안내도달일_val, date):
-            auto_dl = 안내도달일_val + timedelta(days=int(deadline_days))
-            if st.session_state.get("inp_회신기한") != auto_dl:
-                st.session_state["inp_회신기한"] = auto_dl
-        st.date_input("회신기한 ✦자동", key="inp_회신기한")
+        d4, d5, d6, d7 = st.columns(4)
+        with d4:
+            st.date_input("회신접수일", key="inp_회신접수일")
+        with d5:
+            st.selectbox("조정동의여부", ["", "동의", "부동의", "무응답"], key="inp_조정동의여부")
+        with d6:
+            st.selectbox("개최여부", ["", "개최", "불개시"], key="inp_개최여부")
+        with d7:
+            st.selectbox("결과", ["", "조정성립", "조정불성립", "조정중지", "종결"], key="inp_결과")
 
-    d4, d5, d6, d7 = st.columns(4)
-    with d4:
-        st.date_input("회신접수일", key="inp_회신접수일")
-    with d5:
-        st.selectbox("조정동의여부", ["", "동의", "부동의", "무응답"], key="inp_조정동의여부")
-    with d6:
-        st.selectbox("개최여부", ["", "개최", "불개시"], key="inp_개최여부")
-    with d7:
-        st.selectbox("결과", ["", "조정성립", "조정불성립", "조정중지", "종결"], key="inp_결과")
-
-    st.date_input("종결일자", key="inp_종결일자")
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.date_input("종결일자", key="inp_종결일자")
 
     # ══════════════════════════════════════════════
     # 저장 버튼
@@ -423,10 +393,16 @@ with tab_single:
             else:
                 data.pop("접수번호", None)
                 update_case(번호, data)
-                badge = status_badge(data["진행상태"])
-                st.success(f"**{번호}** 수정 완료!")
-                st.markdown(f"진행상태: {badge}", unsafe_allow_html=True)
                 st.session_state.pop("_active_edit", None)
+                origin = st.session_state.pop("_edit_origin", None)
+                origin_case = st.session_state.pop("_edit_origin_case", None)
+                if origin == "pages/4_사건상세.py" and origin_case:
+                    st.session_state["detail_case"] = origin_case
+                    st.cache_data.clear()
+                    st.switch_page("pages/4_사건상세.py")
+                else:
+                    st.cache_data.clear()
+                    st.switch_page("pages/3_접수대장.py")
         except Exception as e:
             st.error(f"저장 오류: {e}")
 
