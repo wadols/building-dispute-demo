@@ -9,10 +9,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import (
-    init_db, get_all_cases,
-    get_stats_by_period, get_monthly_counts, get_deadline_cases,
+    init_db, get_all_cases, get_deadline_cases,
 )
-from core.status_resolver import resolve_status, STATUS_COLORS
+from core.status_resolver import resolve_status, STATUS_COLORS, CLOSED_STATUSES
 from core.ui_styles import inject_css, page_header, status_badge, kpi_card_html
 
 st.set_page_config(page_title="홈", page_icon="🏠", layout="wide")
@@ -34,30 +33,86 @@ cur_year = date.today().year
 
 @st.cache_data(ttl=30)
 def load_dashboard(year):
-    start = f"{year}-01-01"
-    end   = f"{year}-12-31"
-    stats   = get_stats_by_period(start, end)
-    monthly = get_monthly_counts(year)
-    urgent  = [dict(r) for r in get_deadline_cases(days=7)]
     all_rows = [dict(r) for r in get_all_cases(year=year)]
     today = date.today()
+
     for r in all_rows:
         r["진행상태"] = resolve_status(r)
         if r.get("접수일자"):
             try:
-                r["법정처리기한"] = (date.fromisoformat(r["접수일자"]) + timedelta(days=60)).isoformat()
+                r["법정처리기한"] = (
+                    date.fromisoformat(str(r["접수일자"])[:10]) + timedelta(days=60)
+                ).isoformat()
             except Exception:
                 r["법정처리기한"] = None
         else:
             r["법정처리기한"] = None
-    # 법정처리기한 14일 이내 사건 (미종결)
+
+    # ── KPI 집계 (resolve_status 기준 → 접수대장과 동일)
+    total       = len(all_rows)
+    closed      = sum(1 for r in all_rows if r["진행상태"] in CLOSED_STATUSES)
+    active      = total - closed
+    established = sum(1 for r in all_rows if r["진행상태"] == "조정성립")
+    agreed      = sum(1 for r in all_rows if r.get("조정동의여부") == "동의")
+
+    # 위원회 개최 수: 개최여부='개최' 또는 결과가 조정성립/조정불성립인 사건 수
+    hearing_count = sum(
+        1 for r in all_rows
+        if r.get("개최여부") == "개최"
+        or r.get("결과") in ("조정성립", "조정불성립")
+    )
+
+    # 분쟁유형별
+    type_dict: dict = {}
+    for r in all_rows:
+        t = r.get("분쟁유형") or None
+        type_dict[t] = type_dict.get(t, 0) + 1
+    dispute_types = [
+        {"분쟁유형": k, "cnt": v}
+        for k, v in sorted(type_dict.items(), key=lambda x: -x[1])
+    ]
+
+    stats = {
+        "접수건수":  total,
+        "처리중":    active,
+        "종결":      closed,
+        "동의건수":  agreed,
+        "동의율":    round(agreed / total * 100, 1) if total else 0,
+        "성립건수":  established,
+        "성립률":    round(established / total * 100, 1) if total else 0,
+        "개최건수":  hearing_count,
+        "분쟁유형별": dispute_types,
+        "지역별":    [],
+    }
+
+    # ── 월별 추이 (접수연도 기준, resolve_status로 종결 판단)
+    monthly_dict: dict = {}
+    for r in all_rows:
+        접수일자 = r.get("접수일자")
+        if not 접수일자:
+            continue
+        try:
+            m = int(str(접수일자)[5:7])
+        except Exception:
+            continue
+        bucket = monthly_dict.setdefault(m, {"월": m, "접수": 0, "종결": 0})
+        bucket["접수"] += 1
+        if r["진행상태"] in CLOSED_STATUSES:
+            bucket["종결"] += 1
+    monthly = sorted(monthly_dict.values(), key=lambda x: x["월"])
+
+    # ── 회신 임박 알림 (7일 이내)
+    urgent = [dict(r) for r in get_deadline_cases(days=7)]
+
+    # ── 법정처리기한 임박 (14일 이내, 미종결)
     legal_urgent = [
         r for r in all_rows
         if r.get("법정처리기한")
-        and r["진행상태"] != "종결"
+        and r["진행상태"] not in CLOSED_STATUSES
         and (date.fromisoformat(r["법정처리기한"]) - today).days <= 14
     ]
     legal_urgent.sort(key=lambda x: x["법정처리기한"])
+
     return stats, monthly, urgent, all_rows, legal_urgent
 
 
@@ -250,7 +305,7 @@ STATUS_EMOJI = {
     "조정성립": "✅", "조정불성립": "❌",
 }
 
-active = [r for r in all_rows if r["진행상태"] != "종결"]
+active = [r for r in all_rows if r["진행상태"] not in CLOSED_STATUSES]
 if active:
     df_a = pd.DataFrame(active)[
         ["접수번호", "지역", "건물명", "신청인_성명", "피신청인_성명", "분쟁유형", "회신기한", "진행상태"]
@@ -260,16 +315,17 @@ if active:
         df_a,
         use_container_width=True,
         hide_index=True,
-        height=min(80 + len(df_a) * 35, 340),
+        height=min(46 + len(df_a) * 30, 320),
+        row_height=30,
         column_config={
-            "접수번호":      st.column_config.TextColumn("접수번호",  width="medium"),
-            "지역":          st.column_config.TextColumn("지역",      width="small"),
-            "건물명":        st.column_config.TextColumn("건물명",    width="medium"),
-            "신청인_성명":   st.column_config.TextColumn("신청인",    width="small"),
-            "피신청인_성명": st.column_config.TextColumn("피신청인",  width="small"),
-            "분쟁유형":      st.column_config.TextColumn("유형",      width="small"),
-            "회신기한":      st.column_config.DateColumn("회신기한",  width="small", format="YYYY-MM-DD"),
-            "진행상태":      st.column_config.TextColumn("상태",      width="small"),
+            "접수번호":      st.column_config.TextColumn("접수번호",  width=88),
+            "지역":          st.column_config.TextColumn("지역",      width=62),
+            "건물명":        st.column_config.TextColumn("건물명",    width=100),
+            "신청인_성명":   st.column_config.TextColumn("신청인",    width=80),
+            "피신청인_성명": st.column_config.TextColumn("피신청인",  width=110),
+            "분쟁유형":      st.column_config.TextColumn("유형",      width=120),
+            "회신기한":      st.column_config.DateColumn("회신기한",  width=84, format="YY-MM-DD"),
+            "진행상태":      st.column_config.TextColumn("상태",      width=76),
         },
     )
 else:

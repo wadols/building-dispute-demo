@@ -268,6 +268,22 @@ hr { border-color: #E2E8F0 !important; margin: 8px 0 !important; }
 """
 
 
+import re as _re
+def case_folder_path(output_root, 접수번호: str, 신청인: str = "", 피신청인: str = ""):
+    """
+    사건 폴더 경로 반환.
+    - 구형(번호만) 폴더가 이미 존재하면 그대로 사용 (하위 호환)
+    - 없으면 '접수번호_신청인_피신청인' 형식 반환
+    """
+    def _safe(s: str) -> str:
+        return _re.sub(r'[\\/:*?"<>|]', '', str(s)).strip()
+
+    old = output_root / 접수번호
+    if old.exists():
+        return old
+    return output_root / _safe(f"{접수번호}_{신청인}_{피신청인}")
+
+
 def inject_css():
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 

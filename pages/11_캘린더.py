@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import init_db, get_all_cases
-from core.status_resolver import resolve_status
+from core.status_resolver import resolve_status, CLOSED_STATUSES
 from core.ui_styles import inject_css, page_header
 
 st.set_page_config(page_title="캘린더", page_icon="📅", layout="wide")
@@ -89,7 +89,7 @@ cases = load_cases_calendar()
 # 이벤트 딕셔너리: {날짜str: [(접수번호, 구분)]}
 events: dict[str, list] = {}
 for c in cases:
-    if c["진행상태"] == "종결":
+    if c["진행상태"] in CLOSED_STATUSES:
         continue
     for key, label in [("회신기한", "reply"), ("법정처리기한", "legal")]:
         d = c.get(key)
@@ -193,7 +193,7 @@ month_end   = f"{year:04d}-{month:02d}-{last_day:02d}"
 
 this_month = []
 for c in cases:
-    if c["진행상태"] == "종결":
+    if c["진행상태"] in CLOSED_STATUSES:
         continue
     if c.get("회신기한") and month_start <= c["회신기한"] <= month_end:
         remain = (date.fromisoformat(c["회신기한"]) - today).days
@@ -234,7 +234,8 @@ if this_month:
         df_evt,
         use_container_width=True,
         hide_index=True,
-        height=min(80 + len(df_evt) * 35, 400),
+        height=min(46 + len(df_evt) * 30, 380),
+        row_height=30,
         column_config={
             "구분":      st.column_config.TextColumn("구분",      width="medium"),
             "접수번호":  st.column_config.TextColumn("접수번호",  width="medium"),

@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import init_db, create_case, case_exists, next_case_number, get_case, update_case
 from core.status_resolver import resolve_status
-from core.ui_styles import inject_css, page_header, status_badge, section_header
+from core.ui_styles import inject_css, page_header, status_badge, section_header, case_folder_path
 from core.address_search import address_search_widget
 
 st.set_page_config(page_title="신규 접수", page_icon="📋", layout="wide")
@@ -60,8 +60,13 @@ if _init_key not in st.session_state:
     def _v(f, default=""):
         return existing[f] if (existing and existing.get(f) is not None) else default
 
+    def _d(val: str) -> date | None:
+        if not val:
+            return None
+        return date.fromisoformat(str(val)[:10])
+
     st.session_state["inp_접수번호"]          = _v("접수번호", next_case_number(today.year))
-    st.session_state["inp_접수일자"]          = date.fromisoformat(_v("접수일자", today.isoformat()))
+    st.session_state["inp_접수일자"]          = _d(_v("접수일자", today.isoformat()))
     st.session_state["inp_지역"]              = _v("지역")
     st.session_state["inp_분쟁유형"]          = _v("분쟁유형")
     st.session_state["inp_신청내용"]          = _v("신청내용")
@@ -78,13 +83,20 @@ if _init_key not in st.session_state:
     st.session_state["inp_피신청인_우편번호"] = _v("피신청인_우편번호")
     st.session_state["inp_피신청인_연락처"]   = _v("피신청인_연락처")
     st.session_state["inp_피신청인_지위"]     = _v("피신청인_지위")
-    st.session_state["inp_안내도달일"]        = date.fromisoformat(_v("안내도달일")) if _v("안내도달일") else None
-    st.session_state["inp_회신기한"]          = date.fromisoformat(_v("회신기한"))   if _v("회신기한")   else None
-    st.session_state["inp_회신접수일"]        = date.fromisoformat(_v("회신접수일")) if _v("회신접수일") else None
+    st.session_state["inp_피신청인2_성명"]     = _v("피신청인2_성명")
+    st.session_state["inp_피신청인2_주소"]     = _v("피신청인2_주소")
+    st.session_state["inp_피신청인2_우편번호"] = _v("피신청인2_우편번호")
+    st.session_state["inp_피신청인2_연락처"]   = _v("피신청인2_연락처")
+    st.session_state["inp_피신청인2_지위"]     = _v("피신청인2_지위")
+    st.session_state.setdefault("show_rp2", bool(existing and existing.get("피신청인2_성명")))
+    st.session_state.setdefault("show_rp2_search", False)
+    st.session_state["inp_안내도달일"]        = _d(_v("안내도달일"))
+    st.session_state["inp_회신기한"]          = _d(_v("회신기한"))
+    st.session_state["inp_회신접수일"]        = _d(_v("회신접수일"))
     st.session_state["inp_조정동의여부"]      = _v("조정동의여부")
     st.session_state["inp_개최여부"]          = _v("개최여부")
     st.session_state["inp_결과"]              = _v("결과")
-    st.session_state["inp_종결일자"]          = date.fromisoformat(_v("종결일자"))   if _v("종결일자")   else None
+    st.session_state["inp_종결일자"]          = _d(_v("종결일자"))
     # 주소 검색 표시 여부
     st.session_state.setdefault("show_ap_search", False)
     st.session_state.setdefault("show_rp_search", False)
@@ -225,7 +237,21 @@ with tab_single:
             st.date_input("접수일자 *", key="inp_접수일자")
         with c3:
             st.text_input("지역 *", key="inp_지역", placeholder="예: 수원시 영통구")
-        분쟁유형_opts = ["", "관리비", "하자", "소음·진동", "주차", "공용부분", "층간소음", "관리단 운영", "선거·의결", "기타"]
+        분쟁유형_opts = [
+            "",
+            "하자",
+            "관리인·관리위원 선임·해임 및 관리단 구성·운영",
+            "공용부분 보존·관리·변경",
+            "관리비 징수·관리·사용",
+            "규약 제정·개정",
+            "재건축 관련 철거·비용분담·구분소유권 귀속",
+            "소음·약취 등 공동생활",
+            "대지·부속시설 보존·관리·변경",
+            "전유부분 사용방법",
+            "관리비 외 수입 징수·관리·사용",
+            "관리위탁계약 등 관리단 체결 계약",
+            "기타",
+        ]
         c4, c5 = st.columns([2, 4])
         with c4:
             st.selectbox("분쟁유형", 분쟁유형_opts, key="inp_분쟁유형")
@@ -276,6 +302,43 @@ with tab_single:
                            show_key="show_rp_search")
             st.text_input("주소 *", key="inp_피신청인_주소")
             st.text_input("우편번호", key="inp_피신청인_우편번호", max_chars=6)
+            if not st.session_state.get("show_rp2"):
+                st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
+                if st.button("➕ 피신청인 추가", use_container_width=True, key="btn_add_rp2"):
+                    st.session_state["show_rp2"] = True
+                    st.rerun()
+
+    # ── 피신청인2 (조건부 표시)
+    if st.session_state.get("show_rp2"):
+        with st.container(border=True):
+            hdr_col, del_col = st.columns([9, 1])
+            with hdr_col:
+                section_header("④-2", "피신청인2 정보")
+            with del_col:
+                st.markdown('<div style="margin-top:6px"></div>', unsafe_allow_html=True)
+                if st.button("✕ 제거", key="btn_del_rp2", use_container_width=True):
+                    st.session_state["show_rp2"] = False
+                    for _k in ["inp_피신청인2_성명", "inp_피신청인2_주소",
+                               "inp_피신청인2_우편번호", "inp_피신청인2_연락처", "inp_피신청인2_지위"]:
+                        st.session_state[_k] = ""
+                    st.session_state["show_rp2_search"] = False
+                    st.rerun()
+
+            rp2a, rp2b = st.columns(2)
+            with rp2a:
+                st.text_input("성명 *", key="inp_피신청인2_성명", placeholder="두번째 피신청인")
+                st.text_input("지위", key="inp_피신청인2_지위", placeholder="예: 관리단, 입주자대표회의")
+                st.text_input("연락처", key="inp_피신청인2_연락처", placeholder="010-0000-0000")
+            with rp2b:
+                if st.button("🔍 주소 검색 (다음)", key="btn_rp2_search", use_container_width=True):
+                    st.session_state["show_rp2_search"] = not st.session_state.get("show_rp2_search", False)
+                if st.session_state.get("show_rp2_search", False):
+                    rp2_result = address_search_widget(key="rp2_addr_search")
+                    apply_addr(rp2_result,
+                               addr_key="inp_피신청인2_주소", zip_key="inp_피신청인2_우편번호",
+                               show_key="show_rp2_search")
+                st.text_input("주소", key="inp_피신청인2_주소")
+                st.text_input("우편번호", key="inp_피신청인2_우편번호", max_chars=6)
 
     # ══════════════════════════════════════════════
     # ⑤ 진행 정보
@@ -350,8 +413,14 @@ with tab_single:
             st.error(f"**{번호}** 는 이미 존재합니다. '기존 사건 수정' 모드를 사용하세요.")
             st.stop()
 
+        # 접수연도는 접수번호 앞자리 연도 기준 (접수일자가 전년 12월일 수 있음)
+        try:
+            _yr = int(번호.split("-")[0])
+        except Exception:
+            _yr = 접수일자_v.year
+
         data = {
-            "접수연도":          접수일자_v.year,
+            "접수연도":          _yr,
             "접수번호":          번호,
             "지역":              gss("inp_지역"),
             "신청인_성명":       gss("inp_신청인_성명"),
@@ -364,6 +433,11 @@ with tab_single:
             "피신청인_우편번호": opt(gss("inp_피신청인_우편번호")),
             "피신청인_연락처":   opt(gss("inp_피신청인_연락처")),
             "피신청인_지위":     opt(gss("inp_피신청인_지위")),
+            "피신청인2_성명":     opt(gss("inp_피신청인2_성명")) if st.session_state.get("show_rp2") else None,
+            "피신청인2_주소":     opt(gss("inp_피신청인2_주소")) if st.session_state.get("show_rp2") else None,
+            "피신청인2_우편번호": opt(gss("inp_피신청인2_우편번호")) if st.session_state.get("show_rp2") else None,
+            "피신청인2_연락처":   opt(gss("inp_피신청인2_연락처")) if st.session_state.get("show_rp2") else None,
+            "피신청인2_지위":     opt(gss("inp_피신청인2_지위")) if st.session_state.get("show_rp2") else None,
             "건물명":            opt(gss("inp_건물명")),
             "건물소재지":        opt(gss("inp_건물소재지")),
             "건축물용도":        opt(gs("inp_건축물용도") or None),
@@ -383,7 +457,10 @@ with tab_single:
         try:
             if mode == "신규 접수":
                 create_case(data)
-                folder = OUTPUT_ROOT / 번호
+                folder = case_folder_path(
+                    OUTPUT_ROOT, 번호,
+                    data.get("신청인_성명", ""), data.get("피신청인_성명", ""),
+                )
                 folder.mkdir(parents=True, exist_ok=True)
                 st.toast(f"✅ {번호} 접수 완료! (진행상태: {data['진행상태']})", icon="✅")
                 # ── 폼 완전 초기화 → 다음 접수번호 자동 반영
@@ -481,6 +558,15 @@ with tab_bulk:
 
             with col_go:
                 if st.button("✅ 가져오기 실행", type="primary", use_container_width=True, key="bulk_run"):
+                    import re as _re
+
+                    def _cell(v):
+                        s = str(v).strip() if v is not None else ""
+                        return s  # NOT NULL 컬럼은 빈 문자열로 허용
+
+                    # CHECK 제약이 있는 선택 컬럼: 빈 값 → None
+                    _nullable_check = {"조정동의여부"}
+
                     ok = err = dup = 0
                     log_lines = []
                     for _, row in df.iterrows():
@@ -495,14 +581,16 @@ with tab_bulk:
                                 log_lines.append(f"⏭ {case_no} — 이미 존재 (건너뜀)")
                                 continue
                         try:
-                            data = {k: (row.get(k, "") or "") for k in [
+                            data = {k: _cell(row.get(k)) for k in [
                                 "접수번호", "접수연도", "지역", "건물명", "건물소재지",
                                 "신청인_성명", "신청인_주소", "신청인_연락처",
                                 "피신청인_성명", "피신청인_주소", "피신청인_연락처", "피신청인_우편번호",
                                 "신청내용", "분쟁유형", "접수일자", "조정동의여부",
                             ]}
+                            for _col in _nullable_check:
+                                if not data.get(_col):
+                                    data[_col] = None
                             if not data.get("접수연도"):
-                                import re as _re
                                 m = _re.match(r"(\d{4})", case_no)
                                 data["접수연도"] = int(m.group(1)) if m else today.year
                             else:

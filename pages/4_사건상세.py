@@ -12,11 +12,11 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import (
-    init_db, get_case, update_case,
+    init_db, get_case, update_case, delete_case,
     get_notes, create_note, update_note, delete_note,
 )
-from core.status_resolver import resolve_status
-from core.ui_styles import inject_css, page_header, status_badge, section_header
+from core.status_resolver import resolve_status, CLOSED_STATUSES
+from core.ui_styles import inject_css, page_header, status_badge, section_header, case_folder_path
 
 st.set_page_config(page_title="사건 상세", page_icon="🔎", layout="wide")
 if "db_initialized" not in st.session_state:
@@ -101,7 +101,7 @@ _steps_data = [
     ("안내발송", bool(case.get("안내도달일")),            (case.get("안내도달일") or "")[:10]),
     ("회신",    bool(case.get("회신접수일")),             (case.get("회신접수일") or "")[:10]),
     ("위원회",  case.get("개최여부") == "개최",           ""),
-    ("종결",    status == "종결",                         (case.get("종결일자") or "")[:10]),
+    ("종결",    status in CLOSED_STATUSES,                 (case.get("종결일자") or "")[:10]),
 ]
 _flags = [s[1] for s in _steps_data]
 _current_idx = next((i for i, f in enumerate(_flags) if not f), len(_steps_data))
@@ -199,14 +199,48 @@ with tab1:
                 row2("연락처",  case.get("피신청인_연락처"))
             ), unsafe_allow_html=True)
 
-    if st.button("✏️ 이 사건 수정하기", type="primary"):
-        st.session_state["edit_case"] = case["접수번호"]
-        st.session_state["_edit_origin"] = "pages/4_사건상세.py"
-        st.session_state["_edit_origin_case"] = case["접수번호"]
-        for k in list(st.session_state.keys()):
-            if k.startswith("_form_ready_") or k.startswith("inp_"):
-                del st.session_state[k]
-        st.switch_page("pages/2_신규접수.py")
+        if case.get("피신청인2_성명"):
+            with st.container(border=True):
+                section_header("④-2", "피신청인2")
+                st.markdown(info_table(
+                    row2("성명",    case.get("피신청인2_성명")) +
+                    row2("지위",    case.get("피신청인2_지위")) +
+                    row2("주소",    case.get("피신청인2_주소")) +
+                    row2("우편번호",case.get("피신청인2_우편번호")) +
+                    row2("연락처",  case.get("피신청인2_연락처"))
+                ), unsafe_allow_html=True)
+
+    btn_edit, btn_del = st.columns([3, 1])
+    with btn_edit:
+        if st.button("✏️ 이 사건 수정하기", type="primary", use_container_width=True):
+            st.session_state["edit_case"] = case["접수번호"]
+            st.session_state["_edit_origin"] = "pages/4_사건상세.py"
+            st.session_state["_edit_origin_case"] = case["접수번호"]
+            for k in list(st.session_state.keys()):
+                if k.startswith("_form_ready_") or k.startswith("inp_"):
+                    del st.session_state[k]
+            st.switch_page("pages/2_신규접수.py")
+    with btn_del:
+        if st.button("🗑️ 사건 삭제", use_container_width=True):
+            st.session_state["_confirm_case_delete"] = case["접수번호"]
+
+    if st.session_state.get("_confirm_case_delete") == case["접수번호"]:
+        st.error(
+            f"**{case['접수번호']}** 사건을 삭제하면 메모·첨부 정보도 모두 사라지며 **복구할 수 없습니다.**"
+        )
+        cc1, cc2, _ = st.columns([1, 1, 4])
+        with cc1:
+            if st.button("✅ 확인 삭제", type="primary", use_container_width=True, key="del_case_ok"):
+                delete_case(case["접수번호"])
+                st.session_state.pop("_confirm_case_delete", None)
+                st.session_state.pop("detail_case", None)
+                st.cache_data.clear()
+                st.success("삭제되었습니다. 접수대장으로 이동합니다.")
+                st.switch_page("pages/3_접수대장.py")
+        with cc2:
+            if st.button("✕ 취소", use_container_width=True, key="del_case_cancel"):
+                st.session_state.pop("_confirm_case_delete", None)
+                st.rerun()
 
 # ────────────────────────────────────────────────
 # TAB 2: 메모 / 일지
@@ -351,7 +385,10 @@ with tab2:
 # TAB 3: 생성 문서
 # ────────────────────────────────────────────────
 with tab3:
-    case_folder = OUTPUT_ROOT / 접수번호
+    case_folder = case_folder_path(
+        OUTPUT_ROOT, 접수번호,
+        case.get("신청인_성명", ""), case.get("피신청인_성명", ""),
+    )
     case_folder.mkdir(parents=True, exist_ok=True)
 
     files = sorted(case_folder.iterdir()) if case_folder.exists() else []

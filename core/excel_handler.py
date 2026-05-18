@@ -45,25 +45,30 @@ def generate_woopyeonmoa(cases: list[dict]) -> Path:
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = _thin_border()
 
-    for r, case in enumerate(cases, 2):
-        row_data = [
-            "보통",                              # 수수료*
-            "환부",                              # 환부*
-            "규격외",                            # 규격*
-            25,                                  # 중량
-            case.get("피신청인_성명", ""),        # 수취인*
-            case.get("피신청인_우편번호", ""),    # 우편번호*
-            case.get("피신청인_주소", ""),        # 기본주소*
-            "",                                  # 상세주소
-            case.get("피신청인_연락처", ""),      # 휴대폰
-            case.get("접수번호", ""),             # 문서번호
-            "집합건물 분쟁조정 통지",             # 문서제목
-            "",                                  # 비고
-        ]
-        for col, val in enumerate(row_data, 1):
-            cell = ws.cell(row=r, column=col, value=val)
-            cell.border = _thin_border()
-            cell.alignment = Alignment(vertical="center")
+    current_row = 2
+    for case in cases:
+        def _wp_row(성명, 우편번호, 주소, 연락처, 접수번호):
+            return [
+                "보통", "환부", "규격외", 25,
+                성명, 우편번호, 주소, "", 연락처, 접수번호, "집합건물 분쟁조정 통지", "",
+            ]
+
+        for row_data in [
+            _wp_row(case.get("피신청인_성명", ""), case.get("피신청인_우편번호", ""),
+                    case.get("피신청인_주소", ""), case.get("피신청인_연락처", ""),
+                    case.get("접수번호", "")),
+            *(
+                [_wp_row(case.get("피신청인2_성명", ""), case.get("피신청인2_우편번호", ""),
+                         case.get("피신청인2_주소", ""), case.get("피신청인2_연락처", ""),
+                         case.get("접수번호", ""))]
+                if case.get("피신청인2_성명") else []
+            ),
+        ]:
+            for col, val in enumerate(row_data, 1):
+                cell = ws.cell(row=current_row, column=col, value=val)
+                cell.border = _thin_border()
+                cell.alignment = Alignment(vertical="center")
+            current_row += 1
 
     widths = [10, 8, 8, 6, 16, 10, 40, 20, 14, 12, 18, 14]
     for i, w in enumerate(widths, 1):
@@ -97,17 +102,25 @@ def generate_labeltek(cases: list[dict]) -> Path:
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = _thin_border()
 
-    for r, case in enumerate(cases, 2):
-        row_data = [
-            "집합건물 분쟁조정 관련",            # 제목 (고정)
-            case.get("피신청인_주소", ""),
-            case.get("피신청인_성명", ""),
-            case.get("피신청인_우편번호", ""),
-        ]
-        for col, val in enumerate(row_data, 1):
-            cell = ws.cell(row=r, column=col, value=val)
-            cell.border = _thin_border()
-            cell.alignment = Alignment(vertical="center")
+    current_row = 2
+    for case in cases:
+        def _lb_row(주소, 성명, 우편번호):
+            return ["집합건물 분쟁조정 관련", 주소, 성명, 우편번호]
+
+        for row_data in [
+            _lb_row(case.get("피신청인_주소", ""), case.get("피신청인_성명", ""),
+                    case.get("피신청인_우편번호", "")),
+            *(
+                [_lb_row(case.get("피신청인2_주소", ""), case.get("피신청인2_성명", ""),
+                          case.get("피신청인2_우편번호", ""))]
+                if case.get("피신청인2_성명") else []
+            ),
+        ]:
+            for col, val in enumerate(row_data, 1):
+                cell = ws.cell(row=current_row, column=col, value=val)
+                cell.border = _thin_border()
+                cell.alignment = Alignment(vertical="center")
+            current_row += 1
 
     ws.column_dimensions["A"].width = 24
     ws.column_dimensions["B"].width = 50
