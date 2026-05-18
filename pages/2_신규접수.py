@@ -217,13 +217,9 @@ with tab_single:
 
     st.markdown("")
 
-    # 신규 접수일 때 접수번호를 항상 최신으로 보정 (다른 탭에서 등록된 경우 대비)
-    if mode == "신규 접수":
-        fresh_num = next_case_number(today.year)
-        cur_num = st.session_state.get("inp_접수번호", "")
-        import re
-        if re.fullmatch(r"\d{4}-\d{3,}", cur_num) and cur_num != fresh_num:
-            st.session_state["inp_접수번호"] = fresh_num
+    # 신규 접수: 접수번호가 비어 있으면 항상 최신 번호로 채움
+    if mode == "신규 접수" and not st.session_state.get("inp_접수번호"):
+        st.session_state["inp_접수번호"] = next_case_number(today.year)
 
     # ══════════════════════════════════════════════
     # ① 사건 기본 정보
@@ -347,7 +343,7 @@ with tab_single:
         section_header("⑤", "진행 정보")
         d1, d2, d3 = st.columns([2, 1, 2])
         with d1:
-            st.date_input("안내도달일", key="inp_안내도달일")
+            st.date_input("안내도달일", value=None, key="inp_안내도달일")
         with d2:
             deadline_days = st.number_input("회신기한 (일)", min_value=1, max_value=60, value=7)
         with d3:
@@ -360,7 +356,7 @@ with tab_single:
 
         d4, d5, d6, d7 = st.columns(4)
         with d4:
-            st.date_input("회신접수일", key="inp_회신접수일")
+            st.date_input("회신접수일", value=None, key="inp_회신접수일")
         with d5:
             st.selectbox("조정동의여부", ["", "동의", "부동의", "무응답"], key="inp_조정동의여부")
         with d6:
@@ -368,7 +364,7 @@ with tab_single:
         with d7:
             st.selectbox("결과", ["", "조정성립", "조정불성립", "조정중지", "종결"], key="inp_결과")
 
-        st.date_input("종결일자", key="inp_종결일자")
+        st.date_input("종결일자", value=None, key="inp_종결일자")
 
     # ══════════════════════════════════════════════
     # 저장 버튼
@@ -462,11 +458,12 @@ with tab_single:
                     data.get("신청인_성명", ""), data.get("피신청인_성명", ""),
                 )
                 folder.mkdir(parents=True, exist_ok=True)
-                st.toast(f"✅ {번호} 접수 완료! (진행상태: {data['진행상태']})", icon="✅")
-                # ── 폼 완전 초기화 → 다음 접수번호 자동 반영
+                # 세션 정리 후 접수대장으로 이동
                 for k in [k for k in list(st.session_state) if k.startswith("inp_") or k == _init_key]:
                     del st.session_state[k]
-                st.rerun()
+                st.cache_data.clear()
+                st.toast(f"✅ {번호} 접수 완료!", icon="✅")
+                st.switch_page("pages/3_접수대장.py")
             else:
                 data.pop("접수번호", None)
                 update_case(번호, data)

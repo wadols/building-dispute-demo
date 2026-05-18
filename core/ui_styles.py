@@ -24,8 +24,8 @@ section[data-testid="stSidebar"] > div { padding-top: 1rem !important; }
 
 /* ── 사이드바 ── */
 [data-testid="stSidebar"] {
-    background: #FFFFFF !important;
-    border-right: 1px solid #E2E8F0 !important;
+    background: #EBF4FF !important;
+    border-right: 1px solid #BFDBFE !important;
 }
 [data-testid="stSidebar"] * { color: #334155 !important; }
 [data-testid="stSidebar"] [data-testid="stSidebarNavLink"] {

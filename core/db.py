@@ -537,7 +537,7 @@ def next_case_number(year: int) -> str:
             (year,),
         ).fetchone()
         last = row[0] or 0
-        return f"{year}-{last + 1:03d}"
+        return f"{year}-{last + 1}"
 
 
 def get_overdue_cases() -> list[sqlite3.Row]:
