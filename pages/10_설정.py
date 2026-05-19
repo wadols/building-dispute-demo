@@ -30,8 +30,10 @@ with tab_db:
     with get_conn() as conn:
         n_cases   = conn.execute("SELECT COUNT(*) FROM cases").fetchone()[0]
         n_notes   = conn.execute("SELECT COUNT(*) FROM case_notes").fetchone()[0]
-        n_members = conn.execute("SELECT COUNT(*) FROM committee_members").fetchone()[0]
-        n_hearings= conn.execute("SELECT COUNT(*) FROM hearings").fetchone()[0]
+        n_members = conn.execute("SELECT COUNT(*) FROM committee_members WHERE 활성여부 = 1").fetchone()[0]
+        n_hearings= conn.execute(
+            "SELECT COUNT(*) FROM cases WHERE 개최여부 = '개최' OR 결과 IN ('조정성립','조정불성립')"
+        ).fetchone()[0]
 
     c1,c2,c3,c4 = st.columns(4)
     for col, label, val in [(c1,"사건",n_cases),(c2,"메모",n_notes),

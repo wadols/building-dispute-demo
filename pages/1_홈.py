@@ -264,32 +264,39 @@ with ch1:
 with ch2:
   with st.container(border=True):
     st.markdown('**분쟁유형별 현황**')
-    if stats["분쟁유형별"] and HAS_ALTAIR:
+    if stats["분쟁유형별"]:
+        import plotly.graph_objects as go
         df_d = (pd.DataFrame(stats["분쟁유형별"])
                 .rename(columns={"분쟁유형": "유형", "cnt": "건수"}))
         df_d["유형"] = df_d["유형"].fillna("미분류")
-        df_d["유형표시"] = df_d["유형"] + "  " + df_d["건수"].astype(str) + "건"
         PALETTE = ["#0066CC", "#10B981", "#F59E0B", "#EF4444",
                    "#8B5CF6", "#06B6D4", "#F97316", "#64748B"]
-        domain = df_d["유형표시"].tolist()
-        chart2 = (
-            alt.Chart(df_d)
-            .mark_arc(innerRadius=50, outerRadius=90, stroke="#fff", strokeWidth=2)
-            .encode(
-                theta=alt.Theta("건수:Q"),
-                color=alt.Color("유형표시:N",
-                                scale=alt.Scale(domain=domain, range=PALETTE[:len(domain)]),
-                                legend=alt.Legend(orient="right", title=None,
-                                                  labelFontSize=11, symbolSize=80)),
-                tooltip=[alt.Tooltip("유형:N"), alt.Tooltip("건수:Q")],
-            )
-            .properties(height=220)
-            .configure_view(strokeWidth=0)
+        fig = go.Figure(go.Pie(
+            labels=df_d["유형"],
+            values=df_d["건수"],
+            hole=0.52,
+            textinfo="value",
+            textposition="inside",
+            insidetextorientation="horizontal",
+            textfont=dict(size=13, color="white", family="Malgun Gothic"),
+            marker=dict(
+                colors=PALETTE[:len(df_d)],
+                line=dict(color="white", width=2),
+            ),
+            hovertemplate="%{label}<br>%{value}건<extra></extra>",
+        ))
+        fig.update_layout(
+            height=240,
+            margin=dict(l=0, r=0, t=0, b=0),
+            legend=dict(
+                orientation="v", x=1.01, y=0.5,
+                font=dict(size=11, family="Malgun Gothic"),
+                itemsizing="constant",
+            ),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.altair_chart(chart2, use_container_width=True)
-    elif stats["분쟁유형별"]:
-        df_d = pd.DataFrame(stats["분쟁유형별"]).rename(columns={"분쟁유형": "유형", "cnt": "건수"})
-        st.dataframe(df_d, use_container_width=True, hide_index=True, height=220)
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("데이터가 없습니다.")
 

@@ -391,13 +391,35 @@ with tab3:
     )
     case_folder.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(case_folder.iterdir()) if case_folder.exists() else []
-    doc_files = [f for f in files if f.is_file()]
+    # 파일 목록 — 재귀적으로 수집 후 하위 폴더별 그룹화
+    def _collect_files(root: Path):
+        """(relative_folder_label, file_path) 목록 반환"""
+        result = []
+        if not root.exists():
+            return result
+        for f in sorted(root.rglob("*")):
+            if f.is_file():
+                rel = f.relative_to(root).parts
+                folder_label = " / ".join(rel[:-1]) if len(rel) > 1 else ""
+                result.append((folder_label, f))
+        return result
+
+    all_files = _collect_files(case_folder)
 
     with st.container(border=True):
         st.markdown('**📁 사건 폴더 파일 목록**')
-        if doc_files:
-            for f in doc_files:
+        if all_files:
+            cur_folder = None
+            for folder_label, f in all_files:
+                if folder_label != cur_folder:
+                    cur_folder = folder_label
+                    label_text = f"📂 {folder_label}" if folder_label else "📂 사건 폴더 (최상위)"
+                    st.markdown(
+                        f'<div style="margin-top:10px;margin-bottom:4px;'
+                        f'font-size:11px;font-weight:700;color:#64748B;'
+                        f'letter-spacing:0.3px">{label_text}</div>',
+                        unsafe_allow_html=True,
+                    )
                 size_kb = f.stat().st_size / 1024
                 mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
                 ext = f.suffix.lower()
@@ -405,11 +427,11 @@ with tab3:
                         ".png": "🖼️", ".pdf": "📕"}.get(ext, "📎")
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:10px;'
-                    f'padding:8px 4px;border-bottom:1px solid #F1F5F9">'
-                    f'<span style="font-size:1.1rem">{icon}</span>'
-                    f'<span style="flex:1;font-size:0.9rem">{f.name}</span>'
-                    f'<span style="font-size:0.78rem;color:#94A3B8">{size_kb:.1f} KB</span>'
-                    f'<span style="font-size:0.78rem;color:#94A3B8;margin-left:12px">{mtime}</span>'
+                    f'padding:6px 4px 6px 16px;border-bottom:1px solid #F1F5F9">'
+                    f'<span style="font-size:1rem">{icon}</span>'
+                    f'<span style="flex:1;font-size:0.88rem">{f.name}</span>'
+                    f'<span style="font-size:0.75rem;color:#94A3B8">{size_kb:.1f} KB</span>'
+                    f'<span style="font-size:0.75rem;color:#94A3B8;margin-left:12px">{mtime}</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )

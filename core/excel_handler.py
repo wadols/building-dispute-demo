@@ -3,13 +3,24 @@
 """
 from pathlib import Path
 from datetime import date
+import re as _re
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+import xlwt
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
-HEARING_OUTPUT_DIR = Path(__file__).parent.parent / "output" / "위원회개최"
-RESULT_OUTPUT_DIR  = Path(__file__).parent.parent / "output" / "위원회결과보고"
+_CASE_OUTPUT_ROOT = Path(__file__).parent.parent / "output" / "사건자료"
 RESULT_SUSANG_TEMPLATE = Path(__file__).parent.parent / "템플릿" / "위원회 결과보고" / "수당 지급내역.xlsx"
+
+
+def _case_dir(case: dict) -> Path:
+    """사건 폴더: output/사건자료/접수번호_신청인_피신청인/ (구형 폴더 하위 호환)"""
+    def _safe(s): return _re.sub(r'[\\/:*?"<>|]', '', str(s)).strip()
+    번호 = case.get("접수번호", "unknown")
+    old = _CASE_OUTPUT_ROOT / 번호
+    if old.exists():
+        return old
+    return _CASE_OUTPUT_ROOT / f"{번호}_{_safe(case.get('신청인_성명',''))}_{_safe(case.get('피신청인_성명',''))}"
 
 
 def _thin_border():
@@ -17,35 +28,42 @@ def _thin_border():
     return Border(left=s, right=s, top=s, bottom=s)
 
 
-def generate_woopyeonmoa(cases: list[dict]) -> Path:
+def generate_woopyeonmoa(cases: list[dict], include_applicant: bool = False) -> Path:
     """
-    우편모아 포맷 xlsx 생성 (원본 xls 컬럼 순서 그대로)
+    우편모아 포맷 xls 생성 (원본 xls 컬럼 순서 그대로)
     수수료*=보통, 환부*=환부, 규격*=규격외, 중량=25 고정
+    include_applicant=True 이면 신청인 행도 추가
     """
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    fname = f"우편모아_{date.today().strftime('%Y%m%d')}.xlsx"
+    fname = f"우편모아_{date.today().strftime('%Y%m%d')}.xls"
     out_path = OUTPUT_DIR / fname
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "우편모아"
+    wb = xlwt.Workbook(encoding="utf-8")
+    ws = wb.add_sheet("우편모아")
+
+    hdr_style = xlwt.easyxf(
+        "font: bold true; "
+        "pattern: pattern solid, fore_colour yellow; "
+        "alignment: horizontal centre, vertical centre; "
+        "borders: left thin, right thin, top thin, bottom thin"
+    )
+    cell_style = xlwt.easyxf(
+        "alignment: vertical centre; "
+        "borders: left thin, right thin, top thin, bottom thin"
+    )
 
     headers = [
         "수수료*", "환부*", "규격*", "중량",
         "수취인*", "우편번호*", "기본주소*", "상세주소",
         "휴대폰", "문서번호", "문서제목", "비고",
     ]
+    widths = [10, 8, 8, 6, 16, 10, 40, 20, 14, 12, 18, 14]
 
-    hdr_fill = PatternFill("solid", fgColor="FFFF00")
-    hdr_font = Font(bold=True)
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.fill = hdr_fill
-        cell.font = hdr_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border = _thin_border()
+    for col, (h, w) in enumerate(zip(headers, widths)):
+        ws.write(0, col, h, hdr_style)
+        ws.col(col).width = int(w * 256)
 
-    current_row = 2
+    current_row = 1
     for case in cases:
         def _wp_row(성명, 우편번호, 주소, 연락처, 접수번호):
             return [
@@ -53,36 +71,40 @@ def generate_woopyeonmoa(cases: list[dict]) -> Path:
                 성명, 우편번호, 주소, "", 연락처, 접수번호, "집합건물 분쟁조정 통지", "",
             ]
 
-        for row_data in [
-            _wp_row(case.get("피신청인_성명", ""), case.get("피신청인_우편번호", ""),
-                    case.get("피신청인_주소", ""), case.get("피신청인_연락처", ""),
-                    case.get("접수번호", "")),
-            *(
-                [_wp_row(case.get("피신청인2_성명", ""), case.get("피신청인2_우편번호", ""),
-                         case.get("피신청인2_주소", ""), case.get("피신청인2_연락처", ""),
-                         case.get("접수번호", ""))]
-                if case.get("피신청인2_성명") else []
-            ),
-        ]:
-            for col, val in enumerate(row_data, 1):
-                cell = ws.cell(row=current_row, column=col, value=val)
-                cell.border = _thin_border()
-                cell.alignment = Alignment(vertical="center")
+        rows = []
+        if include_applicant and case.get("신청인_성명"):
+            rows.append(_wp_row(
+                case.get("신청인_성명", ""), case.get("신청인_우편번호", ""),
+                case.get("신청인_주소", ""), case.get("신청인_연락처", ""),
+                case.get("접수번호", ""),
+            ))
+        rows.append(_wp_row(
+            case.get("피신청인_성명", ""), case.get("피신청인_우편번호", ""),
+            case.get("피신청인_주소", ""), case.get("피신청인_연락처", ""),
+            case.get("접수번호", ""),
+        ))
+        if case.get("피신청인2_성명"):
+            rows.append(_wp_row(
+                case.get("피신청인2_성명", ""), case.get("피신청인2_우편번호", ""),
+                case.get("피신청인2_주소", ""), case.get("피신청인2_연락처", ""),
+                case.get("접수번호", ""),
+            ))
+
+        for row_data in rows:
+            for col, val in enumerate(row_data):
+                ws.write(current_row, col, val, cell_style)
             current_row += 1
 
-    widths = [10, 8, 8, 6, 16, 10, 40, 20, 14, 12, 18, 14]
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-
-    wb.save(out_path)
+    wb.save(str(out_path))
     return out_path
 
 
-def generate_labeltek(cases: list[dict]) -> Path:
+def generate_labeltek(cases: list[dict], include_applicant: bool = False) -> Path:
     """
     라벨텍 포맷 xlsx 생성
     - 제목 열: "집합건물 분쟁조정 관련" (고정)
     - 이후: 주소, 이름, 우편번호
+    include_applicant=True 이면 신청인 행도 추가
     """
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     fname = f"라벨텍_{date.today().strftime('%Y%m%d')}.xlsx"
@@ -107,15 +129,23 @@ def generate_labeltek(cases: list[dict]) -> Path:
         def _lb_row(주소, 성명, 우편번호):
             return ["집합건물 분쟁조정 관련", 주소, 성명, 우편번호]
 
-        for row_data in [
-            _lb_row(case.get("피신청인_주소", ""), case.get("피신청인_성명", ""),
-                    case.get("피신청인_우편번호", "")),
-            *(
-                [_lb_row(case.get("피신청인2_주소", ""), case.get("피신청인2_성명", ""),
-                          case.get("피신청인2_우편번호", ""))]
-                if case.get("피신청인2_성명") else []
-            ),
-        ]:
+        rows = []
+        if include_applicant and case.get("신청인_성명"):
+            rows.append(_lb_row(
+                case.get("신청인_주소", ""), case.get("신청인_성명", ""),
+                case.get("신청인_우편번호", ""),
+            ))
+        rows.append(_lb_row(
+            case.get("피신청인_주소", ""), case.get("피신청인_성명", ""),
+            case.get("피신청인_우편번호", ""),
+        ))
+        if case.get("피신청인2_성명"):
+            rows.append(_lb_row(
+                case.get("피신청인2_주소", ""), case.get("피신청인2_성명", ""),
+                case.get("피신청인2_우편번호", ""),
+            ))
+
+        for row_data in rows:
             for col, val in enumerate(row_data, 1):
                 cell = ws.cell(row=current_row, column=col, value=val)
                 cell.border = _thin_border()
@@ -145,7 +175,7 @@ def generate_docheong_visit(case: dict, hearing: dict, members: list[dict]) -> P
     접수번호 = case.get("접수번호", "unknown")
     회차 = hearing.get("회차", 1)
 
-    out_dir = HEARING_OUTPUT_DIR / f"{접수번호}_{회차}차"
+    out_dir = _case_dir(case) / "위원회개최" / f"{회차}차"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"도청방문등록_{접수번호}_{회차}차.xlsx"
 
@@ -228,7 +258,7 @@ def generate_susang_excel(case: dict, hearing: dict, members: list[dict]) -> Pat
     접수번호 = case.get("접수번호", "unknown")
     회차     = hearing.get("회차", 1)
 
-    out_dir = HEARING_OUTPUT_DIR / f"{접수번호}_{회차}차"
+    out_dir = _case_dir(case) / "위원회개최" / f"{회차}차"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"수당지급내역_{접수번호}_{회차}차.xlsx"
 
@@ -338,7 +368,7 @@ def generate_result_susang_excel(case: dict, hearing: dict, members: list[dict])
     회차      = hearing.get("회차", 1)
     접수연도  = case.get("접수연도", date.today().year)
 
-    out_dir = HEARING_OUTPUT_DIR / f"{접수번호}_{회차}차" / "결과보고"
+    out_dir = _case_dir(case) / "위원회개최" / f"{회차}차" / "결과보고"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"수당지급내역_{접수번호}_{회차}차.xlsx"
 

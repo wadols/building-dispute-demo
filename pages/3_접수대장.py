@@ -202,17 +202,19 @@ if len(checked) >= 2:
         f'</div>',
         unsafe_allow_html=True,
     )
+    _inc_multi = st.checkbox("신청인 포함", key="inc_applicant_multi",
+                             help="체크 시 신청인도 수취인으로 추가됩니다")
     mb1, mb2, mb3, mb4 = st.columns([1, 1, 1, 1])
     with mb1:
         if st.button("📮 우편모아 엑셀 (묶음)", use_container_width=True, key="gen_wp_multi", type="primary"):
             try:
                 rows = [dict(get_case(cid)) for cid in checked if get_case(cid)]
-                out = generate_woopyeonmoa(rows)
+                out = generate_woopyeonmoa(rows, include_applicant=_inc_multi)
                 with open(out, "rb") as f:
                     st.download_button(
                         f"⬇ 우편모아 ({len(rows)}건) 다운로드", f,
                         file_name=out.name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        mime="application/vnd.ms-excel",
                         key="dl_wp_multi",
                     )
             except Exception as e:
@@ -221,7 +223,7 @@ if len(checked) >= 2:
         if st.button("🏷️ 라벨텍 엑셀 (묶음)", use_container_width=True, key="gen_lb_multi", type="primary"):
             try:
                 rows = [dict(get_case(cid)) for cid in checked if get_case(cid)]
-                out = generate_labeltek(rows)
+                out = generate_labeltek(rows, include_applicant=_inc_multi)
                 with open(out, "rb") as f:
                     st.download_button(
                         f"⬇ 라벨텍 ({len(rows)}건) 다운로드", f,
@@ -325,11 +327,22 @@ else:
             unsafe_allow_html=True,
         )
 
-        # ── 버튼 2행
+        # ── 버튼 영역 (5열 2행 균일 그리드)
+        def _gen_hwpx(label: str, template: str, prefix: str, btn_key: str):
+            if st.button(label, use_container_width=True, key=btn_key):
+                cdata = dict(get_case(selected_id))
+                try:
+                    out = generate_hwpx(template, cdata, f"{prefix}_{selected_id}.hwpx")
+                    with open(out, "rb") as f:
+                        st.download_button("⬇ 다운로드", f, file_name=out.name,
+                                           mime="application/octet-stream",
+                                           key=f"dl_{btn_key}")
+                except Exception as e:
+                    st.error(str(e))
 
-        # 1행: 이동 버튼
-        nav1, nav2, nav3, nav4 = st.columns(4)
-        with nav1:
+        # 1행: 이동 3 + 신청인포함 체크박스
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
             if st.button("✏️ 수정하기", use_container_width=True, type="primary", key="act_edit"):
                 st.session_state["edit_case"] = selected_id
                 st.session_state["_edit_origin"] = "pages/3_접수대장.py"
@@ -337,11 +350,11 @@ else:
                     if k.startswith("_form_ready_") or k.startswith("inp_"):
                         del st.session_state[k]
                 st.switch_page("pages/2_신규접수.py")
-        with nav2:
+        with c2:
             if st.button("🔎 상세보기", use_container_width=True, key="act_detail"):
                 st.session_state["detail_case"] = selected_id
                 st.switch_page("pages/4_사건상세.py")
-        with nav3:
+        with c3:
             if st.button("🗂️ 사건자료 폴더", use_container_width=True, key="act_folder"):
                 import subprocess
                 _root = Path(__file__).parent.parent / "output" / "사건자료"
@@ -351,67 +364,46 @@ else:
                 )
                 folder.mkdir(parents=True, exist_ok=True)
                 subprocess.Popen(f'explorer "{folder}"')
-        with nav4:
-            pass  # 여백
+        with c4:
+            st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+            _inc_single = st.checkbox("신청인 포함", key="inc_applicant_single")
 
-        st.markdown('<hr style="margin:12px 0">', unsafe_allow_html=True)
-
-        # 2행: 문서 출력
-        def _gen_hwpx(label: str, template: str, prefix: str, btn_key: str):
-            if st.button(label, use_container_width=True, key=btn_key):
-                cdata = dict(get_case(selected_id))
-                try:
-                    out = generate_hwpx(template, cdata, f"{prefix}_{selected_id}.hwpx")
-                    with open(out, "rb") as f:
-                        st.download_button(
-                            f"⬇ {selected_id} 다운로드", f,
-                            file_name=out.name,
-                            mime="application/octet-stream",
-                            key=f"dl_{btn_key}",
-                        )
-                except Exception as e:
-                    st.error(str(e))
-
-        d1, d2, d3, d4 = st.columns(4)
+        # 2행: 공문 3 + 엑셀 2
+        d1, d2, d3, d4, d5 = st.columns(5)
         with d1:
-            _gen_hwpx("📄 피신청인 통지 공문", "1. 피신청인_통지_공문.hwpx",
-                      "피신청인_통지공문", "gen_notice")
+            _gen_hwpx("📄 통지 공문", "1. 피신청인_통지_공문.hwpx", "피신청인_통지공문", "gen_notice")
         with d2:
-            _gen_hwpx("🚫 조정중지 공문", "2. 조정중지 공문.hwpx",
-                      "조정중지_공문", "gen_stop")
+            _gen_hwpx("🚫 조정중지 공문", "2. 조정중지 공문.hwpx", "조정중지_공문", "gen_stop")
         with d3:
-            _gen_hwpx("📋 조정중지 통보서", "3. 조정중지 통보서.hwpx",
-                      "조정중지_통보서", "gen_stop2")
+            _gen_hwpx("📋 조정중지 통보서", "3. 조정중지 통보서.hwpx", "조정중지_통보서", "gen_stop2")
         with d4:
-            pass
-
-        d5, d6, d7, d8 = st.columns(4)
-        with d5:
-            _gen_hwpx("🚫 불개시 공문", "5. 조정불개시_ 공문.hwpx",
-                      "조정불개시_공문", "gen_rej")
-        with d6:
-            _gen_hwpx("📋 불개시 통보서", "4. 조정불개시_통보서.hwpx",
-                      "조정불개시_통보서", "gen_rej2")
-        with d7:
-            if st.button("📮 우편모아 엑셀", use_container_width=True, key="gen_wp"):
+            if st.button("📮 우편모아", use_container_width=True, key="gen_wp"):
                 try:
-                    out = generate_woopyeonmoa([dict(get_case(selected_id))])
+                    out = generate_woopyeonmoa([dict(get_case(selected_id))],
+                                              include_applicant=_inc_single)
                     with open(out, "rb") as f:
-                        st.download_button("⬇ 우편모아 다운로드", f, file_name=out.name,
-                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                           key="dl_wp")
+                        st.download_button("⬇ 우편모아", f, file_name=out.name,
+                                           mime="application/vnd.ms-excel", key="dl_wp")
                 except Exception as e:
                     st.error(str(e))
-        with d8:
-            if st.button("🏷️ 라벨텍 엑셀", use_container_width=True, key="gen_lb"):
+        with d5:
+            if st.button("🏷️ 라벨텍", use_container_width=True, key="gen_lb"):
                 try:
-                    out = generate_labeltek([dict(get_case(selected_id))])
+                    out = generate_labeltek([dict(get_case(selected_id))],
+                                           include_applicant=_inc_single)
                     with open(out, "rb") as f:
-                        st.download_button("⬇ 라벨텍 다운로드", f, file_name=out.name,
+                        st.download_button("⬇ 라벨텍", f, file_name=out.name,
                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                            key="dl_lb")
                 except Exception as e:
                     st.error(str(e))
+
+        # 3행: 나머지 공문 2종
+        e1, e2, _, _, _ = st.columns(5)
+        with e1:
+            _gen_hwpx("🚫 불개시 공문", "5. 조정불개시_ 공문.hwpx", "조정불개시_공문", "gen_rej")
+        with e2:
+            _gen_hwpx("📋 불개시 통보서", "4. 조정불개시_통보서.hwpx", "조정불개시_통보서", "gen_rej2")
 
         # ── 빠른 상태 변경
         st.markdown('<hr style="margin:14px 0 10px">', unsafe_allow_html=True)
