@@ -185,6 +185,13 @@ sel_indices = tbl_event.selection.rows if tbl_event and tbl_event.selection else
 checked = [df_disp.iloc[i]["접수번호"] for i in sel_indices if i < len(df_disp)]
 selected_id = checked[0] if len(checked) == 1 else (checked[-1] if len(checked) > 1 else None)
 
+# 선택 사건 바뀌면 이전 문서 버튼 초기화
+if st.session_state.get("_hwpx_selected") != selected_id:
+    for k in list(st.session_state.keys()):
+        if k.startswith("_hwpx_out_"):
+            del st.session_state[k]
+    st.session_state["_hwpx_selected"] = selected_id
+
 # ══════════════════════════════════════════════
 # 하단 액션 영역 (선택된 사건)
 # ══════════════════════════════════════════════
@@ -333,12 +340,24 @@ else:
                 cdata = dict(get_case(selected_id))
                 try:
                     out = generate_hwpx(template, cdata, f"{prefix}_{selected_id}.hwpx")
-                    with open(out, "rb") as f:
-                        st.download_button("⬇ 다운로드", f, file_name=out.name,
-                                           mime="application/octet-stream",
-                                           key=f"dl_{btn_key}")
+                    st.session_state[f"_hwpx_out_{btn_key}"] = str(out)
                 except Exception as e:
                     st.error(str(e))
+
+            saved = st.session_state.get(f"_hwpx_out_{btn_key}")
+            if saved:
+                out = Path(saved)
+                if out.exists():
+                    dl_col, folder_col = st.columns(2)
+                    with dl_col:
+                        with open(out, "rb") as f:
+                            st.download_button("⬇ 다운로드", f, file_name=out.name,
+                                               mime="application/octet-stream",
+                                               key=f"dl_{btn_key}")
+                    with folder_col:
+                        if st.button("📂 폴더 열기", key=f"open_{btn_key}"):
+                            import subprocess
+                            subprocess.Popen(f'explorer "{out.parent}"')
 
         # 1행: 이동 3 + 신청인포함 체크박스
         c1, c2, c3, c4, c5 = st.columns(5)

@@ -504,8 +504,9 @@ def get_monthly_counts(year: int) -> list[dict]:
                     THEN 1 ELSE 0 END) AS 종결
             FROM cases
             WHERE 접수연도 = ?
+              AND strftime('%Y', 접수일자) = ?
             GROUP BY 월 ORDER BY 월
-        """, (year,)).fetchall()
+        """, (year, str(year))).fetchall()
         return [dict(r) for r in rows]
 
 

@@ -85,13 +85,16 @@ def load_dashboard(year):
         "지역별":    [],
     }
 
-    # ── 월별 추이 (접수연도 기준, resolve_status로 종결 판단)
+    # ── 월별 추이 (접수일자 연도가 선택 연도와 일치하는 건만)
     monthly_dict: dict = {}
     for r in all_rows:
         접수일자 = r.get("접수일자")
         if not 접수일자:
             continue
         try:
+            접수년 = int(str(접수일자)[:4])
+            if 접수년 != year:
+                continue
             m = int(str(접수일자)[5:7])
         except Exception:
             continue
@@ -155,13 +158,13 @@ if legal_urgent:
         for c in legal_urgent:
             remain = (date.fromisoformat(c["법정처리기한"]) - date.today()).days
             if remain <= 0:
-                d_color, bg = "#DC2626", "#FFF1F2"
+                d_color, bg = "#B91C1C", "#FEE2E2"
                 d_label = f"D+{abs(remain)} 초과"
             elif remain <= 7:
-                d_color, bg = "#EA580C", "#FFF7ED"
+                d_color, bg = "#DC2626", "#FEE2E2"
                 d_label = f"D-{remain}"
             else:
-                d_color, bg = "#0369A1", "#F0F9FF"
+                d_color, bg = "#EF4444", "#FEF2F2"
                 d_label = f"D-{remain}"
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;'
@@ -215,49 +218,44 @@ ch1, ch2 = st.columns(2)
 
 with ch1:
   with st.container(border=True):
-    st.markdown('**월별 접수 · 종결 추이**')
+    st.markdown('**월별 접수 건수**')
     if monthly and HAS_ALTAIR:
-        rows = []
-        for r in monthly:
-            rows.append({"월": f"{r['월']}월", "구분": "접수", "건수": r["접수"]})
-            rows.append({"월": f"{r['월']}월", "구분": "종결", "건수": r["종결"]})
-        df_m = pd.DataFrame(rows)
+        df_m = pd.DataFrame([{"월": f"{r['월']}월", "건수": r["접수"]} for r in monthly])
 
-        color_scale = alt.Scale(domain=["접수", "종결"], range=["#0066CC", "#10B981"])
         bars = (
             alt.Chart(df_m)
-            .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, size=16)
+            .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#0066CC")
             .encode(
                 x=alt.X("월:O", sort=None,
-                        axis=alt.Axis(labelAngle=0, labelFontSize=11, titleOpacity=0)),
+                        axis=alt.Axis(labelAngle=0, labelFontSize=11, labelFontWeight="bold", titleOpacity=0)),
                 y=alt.Y("건수:Q",
                         axis=alt.Axis(grid=True, gridColor="#F1F5F9", tickCount=5,
                                       labelFontSize=10, titleOpacity=0)),
-                color=alt.Color("구분:N", scale=color_scale,
-                                legend=alt.Legend(orient="top", title=None,
-                                                  labelFontSize=11, symbolSize=80)),
-                xOffset=alt.XOffset("구분:N"),
-                tooltip=[alt.Tooltip("월:O"), alt.Tooltip("구분:N"), alt.Tooltip("건수:Q")],
+                tooltip=[alt.Tooltip("월:O"), alt.Tooltip("건수:Q", title="접수")],
                 opacity=alt.condition(alt.datum.건수 > 0, alt.value(1.0), alt.value(0.3)),
             )
         )
         labels = (
             alt.Chart(df_m)
-            .mark_text(dy=-6, fontSize=10, fontWeight="bold", color="#374151")
+            .mark_text(dy=-6, fontSize=11, fontWeight="bold", color="#374151")
             .encode(
                 x=alt.X("월:O", sort=None),
                 y=alt.Y("건수:Q"),
-                xOffset=alt.XOffset("구분:N"),
                 text=alt.Text("건수:Q"),
                 opacity=alt.condition(alt.datum.건수 > 0, alt.value(1), alt.value(0)),
             )
         )
-        st.altair_chart((bars + labels).properties(height=220).configure_view(strokeWidth=0),
-                        use_container_width=True)
+        st.altair_chart(
+            (bars + labels)
+            .properties(height=220)
+            .configure_view(strokeWidth=0)
+            .configure_bar(discreteBandSize=48),
+            use_container_width=True,
+        )
     elif monthly:
         df_m = pd.DataFrame(monthly)
         df_m["월"] = df_m["월"].astype(str) + "월"
-        st.bar_chart(df_m.set_index("월")[["접수", "종결"]], height=220)
+        st.bar_chart(df_m.set_index("월")["접수"], height=220)
     else:
         st.info(f"{sel_year}년 데이터가 없습니다.")
 
@@ -337,3 +335,15 @@ if active:
     )
 else:
     st.info(f"{sel_year}년 진행 중인 사건이 없습니다.")
+
+st.markdown(
+    '<div style="margin-top:48px;padding:14px 0 4px;'
+    'border-top:1px solid #E2E8F0;text-align:center;'
+    'color:#94A3B8;font-size:14px;display:flex;align-items:center;'
+    'justify-content:center;gap:8px">'
+    '<img src="https://www.anthropic.com/favicon.ico" '
+    'width="18" height="18" style="vertical-align:middle;border-radius:2px;opacity:0.7">'
+    'Created by Myunghun Kang &nbsp;·&nbsp; Built with Claude Code &nbsp;·&nbsp; 2026'
+    '</div>',
+    unsafe_allow_html=True,
+)

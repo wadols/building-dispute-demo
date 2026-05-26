@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from core.db import init_db, get_all_cases
+from core.db import init_db, get_all_cases, get_all_hearings
 from core.status_resolver import resolve_status, CLOSED_STATUSES
 from core.ui_styles import inject_css, page_header
 
@@ -84,9 +84,31 @@ def load_cases_calendar():
         data.append(d)
     return data
 
-cases = load_cases_calendar()
+@st.cache_data(ttl=30)
+def load_hearings_calendar():
+    cases_map = {c["접수번호"]: c for c in load_cases_calendar()}
+    hearings = []
+    for h in get_all_hearings():
+        h = dict(h)
+        dt = h.get("개최예정일시")
+        if not dt:
+            continue
+        date_str = str(dt)[:10]
+        c = cases_map.get(h.get("접수번호", ""), {})
+        hearings.append({
+            "date_str":  date_str,
+            "회차":      h.get("회차", ""),
+            "접수번호":  h.get("접수번호", ""),
+            "신청인":    c.get("신청인_성명", ""),
+            "피신청인":  c.get("피신청인_성명", ""),
+            "장소":      h.get("개최장소", "") or "",
+        })
+    return hearings
 
-# 이벤트 딕셔너리: {날짜str: [(접수번호, 구분)]}
+cases    = load_cases_calendar()
+hearings = load_hearings_calendar()
+
+# 이벤트 딕셔너리: {날짜str: [(접수번호, 구분, display)]}
 events: dict[str, list] = {}
 for c in cases:
     if c["진행상태"] in CLOSED_STATUSES:
@@ -97,6 +119,11 @@ for c in cases:
             display = f'{c["신청인_성명"]} - {c["피신청인_성명"]}'
             events.setdefault(d, []).append((c["접수번호"], label, display))
 
+# 위원회 개최 이벤트 (날짜 지나도 유지)
+for h in hearings:
+    display = f'제{h["회차"]}회 집합건물분쟁조정위원회({h["신청인"]} - {h["피신청인"]})'
+    events.setdefault(h["date_str"], []).append((h["접수번호"], "hearing", display))
+
 
 # ── 범례
 st.markdown(
@@ -105,7 +132,9 @@ st.markdown(
     'border-radius:100px;font-size:12px;font-weight:600">● 회신기한</span>'
     '<span style="background:#FEE2E2;color:#991B1B;padding:2px 10px;'
     'border-radius:100px;font-size:12px;font-weight:600">● 법정처리기한 (+60일)</span>'
-    '<span style="color:#94A3B8;font-size:12px">종결 사건 제외</span>'
+    '<span style="background:#DCFCE7;color:#166534;padding:2px 10px;'
+    'border-radius:100px;font-size:12px;font-weight:600">● 위원회 개최</span>'
+    '<span style="color:#94A3B8;font-size:12px">종결 사건 제외 (위원회 개최는 전체 표시)</span>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -150,6 +179,8 @@ for week in month_cal:
         for num, etype, display in day_events[:3]:
             if etype == "reply":
                 bg_e, fg_e = "#DBEAFE", "#1D4ED8"
+            elif etype == "hearing":
+                bg_e, fg_e = "#DCFCE7", "#166534"
             else:
                 bg_e, fg_e = "#FEE2E2", "#B91C1C"
             evt_html += (
@@ -218,6 +249,19 @@ for c in cases:
             "신청인": c["신청인_성명"],
             "피신청인": c["피신청인_성명"],
             "진행상태": c["진행상태"],
+        })
+
+for h in hearings:
+    if month_start <= h["date_str"] <= month_end:
+        this_month.append({
+            "구분": "🏛️ 위원회 개최",
+            "접수번호": h["접수번호"],
+            "기한": h["date_str"],
+            "잔여일": f'제{h["회차"]}회',
+            "건물명": h["장소"] or "—",
+            "신청인": h["신청인"],
+            "피신청인": h["피신청인"],
+            "진행상태": "—",
         })
 
 this_month.sort(key=lambda x: x["기한"])

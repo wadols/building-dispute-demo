@@ -23,7 +23,6 @@ pg = st.navigation(
         st.Page("pages/8_보고서.py",         title="보고서",     icon="📊"),
         st.Page("pages/6_위원회개최.py",     title="위원회개최", icon="🏛️"),
         st.Page("pages/5_위원관리.py",       title="위원관리",   icon="👥"),
-        st.Page("pages/7_메모통합검색.py",   title="메모검색",   icon="🔍"),
         st.Page("pages/10_설정.py",          title="설정",       icon="⚙️"),
     ],
     position="sidebar",

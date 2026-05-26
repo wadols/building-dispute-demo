@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from core.db import init_db, get_stats_by_period, get_monthly_counts, get_all_cases
+from core.db import init_db, get_stats_by_period, get_monthly_counts, get_conn
 from core.ui_styles import inject_css, page_header
 
 st.set_page_config(page_title="보고서", page_icon="📊", layout="wide")
@@ -22,7 +22,7 @@ page_header("📊", "보고서", "월별·분기별·연도별 업무 통계")
 col_type, col_year, col_q, col_m = st.columns([2, 1, 1, 1])
 with col_type:
     period_type = st.radio("집계 단위", ["월별", "분기별", "연도별", "기간 직접설정"],
-                           horizontal=True, label_visibility="collapsed")
+                           index=2, horizontal=True, label_visibility="collapsed")
 today = date.today()
 year_now = today.year
 
@@ -70,6 +70,13 @@ st.markdown("---")
 
 # ── 통계 집계
 stats = get_stats_by_period(str(start_d), str(end_d))
+
+# 연도별 모드: 접수건수는 접수연도 기준으로 재집계 (접수일자가 전년 12월인 케이스 포함)
+if period_type == "연도별":
+    with get_conn() as _conn:
+        stats["접수건수"] = _conn.execute(
+            "SELECT COUNT(*) FROM cases WHERE 접수연도 = ?", (sel_year,)
+        ).fetchone()[0]
 
 # ── KPI 카드
 k1, k2, k3, k4 = st.columns(4)
@@ -134,7 +141,7 @@ with col_right:
 # ── 월별 추이 (연도별 모드에서만)
 if period_type == "연도별":
     st.markdown("---")
-    st.markdown("##### 월별 접수·종결 추이")
+    st.markdown("##### 월별 접수 건수")
     monthly = get_monthly_counts(sel_year)
     if monthly:
         try:
@@ -142,42 +149,18 @@ if period_type == "연도별":
             import pandas as pd
             df = pd.DataFrame(monthly)
             fig = go.Figure()
-            fig.add_trace(go.Bar(x=df["월"], y=df["접수"], name="접수", marker_color="#1A56A0"))
-            fig.add_trace(go.Bar(x=df["월"], y=df["종결"], name="종결", marker_color="#27AE60"))
+            fig.add_trace(go.Bar(x=df["월"], y=df["접수"], name="접수", marker_color="#1A56A0",
+                                 text=df["접수"], textposition="outside"))
             fig.update_layout(barmode="group", margin=dict(t=10,b=10,l=10,r=10),
                               height=300, xaxis=dict(tickvals=list(range(1,13)),
-                              ticktext=[f"{i}월" for i in range(1,13)]))
+                              ticktext=[f"{i}월" for i in range(1,13)]),
+                              showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
         except ImportError:
             import pandas as pd
             st.dataframe(pd.DataFrame(monthly), use_container_width=True)
     else:
         st.info("데이터 없음")
-
-# ── 사건 목록 테이블
-st.markdown("---")
-st.markdown("##### 해당 기간 사건 목록")
-cases = get_all_cases()
-period_cases = [
-    c for c in cases
-    if str(start_d) <= (dict(c).get("접수일자") or "") <= str(end_d)
-]
-if period_cases:
-    import pandas as pd
-    rows = []
-    for c in period_cases:
-        d = dict(c)
-        rows.append({
-            "접수번호": d.get("접수번호",""),
-            "신청인": d.get("신청인_성명",""),
-            "피신청인": d.get("피신청인_성명",""),
-            "분쟁유형": d.get("분쟁유형",""),
-            "결과": d.get("결과",""),
-            "접수일자": d.get("접수일자",""),
-        })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-else:
-    st.info("해당 기간 사건이 없습니다.")
 
 # ── 엑셀 내보내기
 st.markdown("---")
