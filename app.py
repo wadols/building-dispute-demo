@@ -1,17 +1,5 @@
-"""
-경기도 집합건물 분쟁조정위원회 업무 자동화 시스템
-"""
-import sys
-print(f"[STARTUP] Python {sys.version}", flush=True)
-
-try:
-    import streamlit as st
-    print("[STARTUP] streamlit OK", flush=True)
-    from core.db import init_db
-    print("[STARTUP] core.db OK", flush=True)
-except Exception as e:
-    print(f"[STARTUP ERROR] {e}", flush=True)
-    raise
+import streamlit as st
+st.write("# 테스트")
 
 st.set_page_config(
     page_title="집합건물 분쟁조정 관리시스템",
