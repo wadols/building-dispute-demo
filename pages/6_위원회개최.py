@@ -1,4 +1,4 @@
-"""
+﻿"""
 위원회 개최 — 개최 등록 / 결과 입력 / 위원 배정
 """
 import streamlit as st
@@ -19,7 +19,6 @@ from core.ui_styles import inject_css, page_header, status_badge
 from core.hwpx_handler import generate_hearing_docs, generate_result_docs
 from core.excel_handler import generate_docheong_visit, generate_susang_excel, generate_result_susang_excel
 
-st.set_page_config(page_title="위원회 개최", page_icon="🏛️", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

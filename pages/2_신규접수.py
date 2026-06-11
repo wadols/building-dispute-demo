@@ -1,4 +1,4 @@
-"""
+﻿"""
 신규 사건 접수 페이지
 - Daum 주소 API (버튼 → 인라인 검색창 → 자동 입력)
 - 신청인 지위: 텍스트 자유 입력
@@ -15,7 +15,6 @@ from core.status_resolver import resolve_status
 from core.ui_styles import inject_css, page_header, status_badge, section_header, case_folder_path
 from core.address_search import address_search_widget
 
-st.set_page_config(page_title="신규 접수", page_icon="📋", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

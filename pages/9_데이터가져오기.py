@@ -1,4 +1,4 @@
-"""
+﻿"""
 데이터 관리 — 엑셀 일괄 가져오기 / 전체 데이터 내보내기
 """
 import streamlit as st
@@ -9,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import init_db, create_case, case_exists, next_case_number, get_all_cases
 from core.ui_styles import inject_css, page_header
 
-st.set_page_config(page_title="데이터 관리", page_icon="📥", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

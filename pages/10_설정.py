@@ -1,4 +1,4 @@
-"""
+﻿"""
 설정 — DB 관리, 백업, 시스템 정보
 """
 import streamlit as st
@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import init_db, get_conn
 from core.ui_styles import inject_css, page_header
 
-st.set_page_config(page_title="설정", page_icon="⚙️", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

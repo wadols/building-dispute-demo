@@ -1,4 +1,4 @@
-"""
+﻿"""
 메모 통합검색 — 전체 사건의 메모·일지를 키워드로 검색
 """
 import streamlit as st
@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import init_db, search_notes, get_recent_notes
 from core.ui_styles import inject_css, page_header
 
-st.set_page_config(page_title="메모 통합검색", page_icon="🔍", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

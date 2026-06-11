@@ -1,4 +1,4 @@
-"""
+﻿"""
 접수대장 — Notion-style 테이블 + 우측 사이드 패널
 행 클릭 → 사건 상세 패널 열림 / 문서 출력 · 엑셀 내보내기
 """
@@ -15,7 +15,6 @@ from core.ui_styles import inject_css, page_header, status_badge, case_folder_pa
 from core.hwpx_handler import generate_hwpx
 from core.excel_handler import generate_woopyeonmoa, generate_labeltek
 
-st.set_page_config(page_title="접수대장", page_icon="📂", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True
