@@ -160,8 +160,8 @@ with tab_add:
     inp_dt = st.text_input("개최 예정 일시 *", key="new_h_dt",
                             placeholder="예: 2026-06-20 14:00",
                             help="YYYY-MM-DD HH:MM 형식")
-    inp_agenda = st.text_area("상정안건", key="new_h_agenda", height=80)
-    inp_note   = st.text_area("비고", key="new_h_note", height=60)
+    inp_agenda = st.text_area("상정안건", key="new_h_agenda", height=100)
+    inp_note   = st.text_area("비고", key="new_h_note", height=100)
 
     # 참석 위원 선택
     st.markdown("#### 참석 위원 배정")
