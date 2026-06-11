@@ -38,6 +38,14 @@ st.markdown("""
 
 if "db_initialized" not in st.session_state:
     init_db()
+    # 데모 브랜치: DB가 비어있으면 가상 샘플 데이터 자동 주입
+    from core.db import get_all_cases
+    if len(get_all_cases()) == 0:
+        try:
+            from seed_demo_data import reset_and_seed
+            reset_and_seed()
+        except Exception:
+            pass
     st.session_state["db_initialized"] = True
 
 pg.run()
