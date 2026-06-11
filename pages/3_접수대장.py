@@ -146,11 +146,17 @@ if df.empty:
 # ══════════════════════════════════════════════
 # 테이블 (전체 너비)
 # ══════════════════════════════════════════════
-st.markdown(
-    '<p style="font-size:12px;color:#94A3B8;margin-bottom:6px">'
-    '클릭으로 사건을 선택합니다  (다중 선택: Ctrl+클릭 또는 Shift+클릭)</p>',
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<style>
+/* 선택 체크박스 영역 강조 */
+[data-testid="stDataFrame"] [role="gridcell"]:first-child { min-width: 36px !important; }
+[data-testid="stDataFrame"] [role="row"]:hover { background: #EFF6FF !important; cursor: pointer; }
+[data-testid="stDataFrame"] [aria-selected="true"] { background: #DBEAFE !important; }
+</style>
+<p style="font-size:13px;color:#475569;margin-bottom:6px;font-weight:500">
+  👆 <b>행을 클릭</b>하면 선택됩니다 &nbsp;·&nbsp; 다중 선택: <b>Ctrl+클릭</b> 또는 <b>Shift+클릭</b>
+</p>
+""", unsafe_allow_html=True)
 
 SHOW_COLS = ["접수번호", "지역", "건물명", "신청인_성명", "피신청인_성명",
              "분쟁유형", "접수일자", "회신기한", "진행상태"]
@@ -162,20 +168,20 @@ tbl_event = st.dataframe(
     df_disp,
     use_container_width=True,
     hide_index=True,
-    height=min(46 + len(df_disp) * 30, 500),
-    row_height=30,
+    height=min(56 + len(df_disp) * 38, 560),
+    row_height=38,
     on_select="rerun",
     selection_mode="multi-row",
     column_config={
-        "접수번호":      st.column_config.TextColumn("접수번호",  width=88),
-        "지역":          st.column_config.TextColumn("지역",      width=62),
-        "건물명":        st.column_config.TextColumn("건물명",    width=100),
-        "신청인_성명":   st.column_config.TextColumn("신청인",    width=80),
-        "피신청인_성명": st.column_config.TextColumn("피신청인",  width=110),
+        "접수번호":      st.column_config.TextColumn("접수번호",  width=95),
+        "지역":          st.column_config.TextColumn("지역",      width=68),
+        "건물명":        st.column_config.TextColumn("건물명",    width=110),
+        "신청인_성명":   st.column_config.TextColumn("신청인",    width=85),
+        "피신청인_성명": st.column_config.TextColumn("피신청인",  width=120),
         "분쟁유형":      st.column_config.TextColumn("유형",      width=120),
-        "접수일자":      st.column_config.DateColumn("접수일자",  width=72, format="YY-MM-DD"),
-        "회신기한":      st.column_config.DateColumn("회신기한",  width=72, format="YY-MM-DD"),
-        "진행상태":      st.column_config.TextColumn("상태",      width=76),
+        "접수일자":      st.column_config.DateColumn("접수일자",  width=78, format="YY-MM-DD"),
+        "회신기한":      st.column_config.DateColumn("회신기한",  width=78, format="YY-MM-DD"),
+        "진행상태":      st.column_config.TextColumn("상태",      width=82),
     },
     key=f"case_table_{st.session_state.get('_tbl_key', 0)}",
 )
