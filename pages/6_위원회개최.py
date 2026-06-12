@@ -322,7 +322,8 @@ with tab_docs:
 
     # 선택 바뀌면 이전 생성 경로 초기화
     if st.session_state.get("_doc_sel_prev") != doc_sel:
-        for k in ["_hearing_docs_folder", "_result_docs_folder"]:
+        for k in ["_hearing_docs_folder", "_hearing_docs_files",
+                  "_result_docs_folder", "_result_docs_files"]:
             st.session_state.pop(k, None)
         st.session_state["_doc_sel_prev"] = doc_sel
 
@@ -373,15 +374,27 @@ with tab_docs:
                         st.success(f"✅ {len(generated)}개 문서 생성 완료!")
                         if generated:
                             st.session_state["_hearing_docs_folder"] = str(generated[0].parent)
+                            st.session_state["_hearing_docs_files"] = [str(p) for p in generated]
                         for p in generated:
                             st.markdown(f"- `{p.name}`")
                     except Exception as e:
                         st.error(f"생성 실패: {e}")
 
             saved_folder = st.session_state.get("_hearing_docs_folder")
-            if saved_folder:
-                st.caption(f"📁 `{saved_folder}`")
-                import sys as _sys
+            saved_files  = st.session_state.get("_hearing_docs_files", [])
+            if saved_folder and saved_files:
+                import io, zipfile, sys as _sys
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for fp in saved_files:
+                        zf.write(fp, Path(fp).name)
+                buf.seek(0)
+                zip_name = f"문서_{h['접수번호']}_{h.get('회차',1)}차.zip"
+                st.download_button("⬇️ ZIP 다운로드", data=buf,
+                                   file_name=zip_name,
+                                   mime="application/zip",
+                                   use_container_width=True,
+                                   key="dl_hearing_zip")
                 if _sys.platform == "win32":
                     if st.button("📂 폴더 열기", key="open_hearing_docs", use_container_width=True):
                         import subprocess
@@ -418,13 +431,25 @@ with tab_docs:
                             st.markdown(f"- `{p.name}`")
                         if generated:
                             st.session_state["_result_docs_folder"] = str(generated[0].parent)
+                            st.session_state["_result_docs_files"] = [str(p) for p in generated]
                     except Exception as e:
                         st.error(f"생성 실패: {e}")
 
             saved_result_folder = st.session_state.get("_result_docs_folder")
-            if saved_result_folder:
-                st.caption(f"📁 `{saved_result_folder}`")
-                import sys as _sys
+            saved_result_files  = st.session_state.get("_result_docs_files", [])
+            if saved_result_folder and saved_result_files:
+                import io, zipfile, sys as _sys
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for fp in saved_result_files:
+                        zf.write(fp, Path(fp).name)
+                buf.seek(0)
+                zip_name = f"결과보고_{h['접수번호']}_{h.get('회차',1)}차.zip"
+                st.download_button("⬇️ ZIP 다운로드", data=buf,
+                                   file_name=zip_name,
+                                   mime="application/zip",
+                                   use_container_width=True,
+                                   key="dl_result_zip")
                 if _sys.platform == "win32":
                     if st.button("📂 폴더 열기", key="open_result_docs", use_container_width=True):
                         import subprocess
