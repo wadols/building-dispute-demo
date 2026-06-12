@@ -148,18 +148,7 @@ with tab_single:
                 with st.expander("추출 원문 확인 (파싱이 안 될 때 참고)"):
                     st.text(_pdf_msg["raw"][:3000])
 
-        # 환경 진단 (임시)
-        import sys as _sys
-        _env_lines = [f"Python: `{_sys.executable}`"]
-        try:
-            import fitz as _fitz; _env_lines.append(f"PyMuPDF: ✅ {_fitz.__version__}")
-        except ImportError: _env_lines.append("PyMuPDF: ❌ 미설치")
-        try:
-            import pdfplumber as _pp; _env_lines.append("pdfplumber: ✅")
-        except ImportError: _env_lines.append("pdfplumber: ❌ 미설치")
-        with st.expander("🔧 환경 진단"):
-            for l in _env_lines: st.markdown(l)
-        st.caption("⚠️ **경기도 홈페이지 안내 페이지 PDF가 아닌**, 신청인이 작성·제출한 신청서 PDF를 업로드하세요. (파일명 예: 붙임1) 집합건물 분쟁조정 신청서.pdf)")
+        st.caption("⚠️ **경기도 홈페이지 안내 페이지 PDF가 아닌**, 신청인이 작성·제출한 신청서 PDF를 업로드하세요. (파일명 예: 집합건물 분쟁조정 신청.pdf)")
         pdf_file = st.file_uploader(
             "신청서 PDF 업로드 (집합건물 분쟁조정 신청서)",
             type=["pdf"], key="pdf_upload",
