@@ -320,6 +320,12 @@ with tab_docs:
         key="doc_hearing_sel",
     )
 
+    # 선택 바뀌면 이전 생성 경로 초기화
+    if st.session_state.get("_doc_sel_prev") != doc_sel:
+        for k in ["_hearing_docs_folder", "_result_docs_folder"]:
+            st.session_state.pop(k, None)
+        st.session_state["_doc_sel_prev"] = doc_sel
+
     if doc_sel:
         hid = doc_opts[doc_sel]
         h   = dict(get_hearing(hid))
@@ -366,11 +372,18 @@ with tab_docs:
                         generated = generate_hearing_docs(c, h, mems)
                         st.success(f"✅ {len(generated)}개 문서 생성 완료!")
                         if generated:
-                            st.markdown(f"**저장 위치:** `{generated[0].parent}`")
+                            st.session_state["_hearing_docs_folder"] = str(generated[0].parent)
                         for p in generated:
                             st.markdown(f"- `{p.name}`")
                     except Exception as e:
                         st.error(f"생성 실패: {e}")
+
+            saved_folder = st.session_state.get("_hearing_docs_folder")
+            if saved_folder:
+                st.caption(f"📁 `{saved_folder}`")
+                if st.button("📂 폴더 열기", key="open_hearing_docs", use_container_width=True):
+                    import subprocess
+                    subprocess.Popen(f'explorer "{saved_folder}"')
 
         with col_excel:
             if st.button("📊 도청방문등록 엑셀 생성", use_container_width=True):
@@ -402,9 +415,16 @@ with tab_docs:
                         for p in generated:
                             st.markdown(f"- `{p.name}`")
                         if generated:
-                            st.markdown(f"**저장 위치:** `{generated[0].parent}`")
+                            st.session_state["_result_docs_folder"] = str(generated[0].parent)
                     except Exception as e:
                         st.error(f"생성 실패: {e}")
+
+            saved_result_folder = st.session_state.get("_result_docs_folder")
+            if saved_result_folder:
+                st.caption(f"📁 `{saved_result_folder}`")
+                if st.button("📂 폴더 열기", key="open_result_docs", use_container_width=True):
+                    import subprocess
+                    subprocess.Popen(f'explorer "{saved_result_folder}"')
 
         with col_result2:
             if st.button("💰 수당 지급내역 생성", use_container_width=True):
