@@ -364,8 +364,9 @@ else:
                                                key=f"dl_{btn_key}")
                     with folder_col:
                         if st.button("📂 폴더 열기", key=f"open_{btn_key}"):
-                            import subprocess
-                            subprocess.Popen(f'explorer "{out.parent}"')
+                            import subprocess, sys as _sys
+                            if _sys.platform == "win32":
+                                subprocess.Popen(f'explorer "{out.parent}"')
 
         # 1행: 이동 3 + 신청인포함 체크박스
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -383,14 +384,15 @@ else:
                 st.switch_page("pages/4_사건상세.py")
         with c3:
             if st.button("🗂️ 사건자료 폴더", use_container_width=True, key="act_folder"):
-                import subprocess
+                import subprocess, sys as _sys
                 _root = Path(__file__).parent.parent / "output" / "사건자료"
                 folder = case_folder_path(
                     _root, selected_id,
                     case.get("신청인_성명", ""), case.get("피신청인_성명", ""),
                 )
                 folder.mkdir(parents=True, exist_ok=True)
-                subprocess.Popen(f'explorer "{folder}"')
+                if _sys.platform == "win32":
+                    subprocess.Popen(f'explorer "{folder}"')
         with c4:
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
             _inc_single = st.checkbox("신청인 포함", key="inc_applicant_single")

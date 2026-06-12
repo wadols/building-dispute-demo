@@ -381,9 +381,11 @@ with tab_docs:
             saved_folder = st.session_state.get("_hearing_docs_folder")
             if saved_folder:
                 st.caption(f"📁 `{saved_folder}`")
-                if st.button("📂 폴더 열기", key="open_hearing_docs", use_container_width=True):
-                    import subprocess
-                    subprocess.Popen(f'explorer "{saved_folder}"')
+                import sys as _sys
+                if _sys.platform == "win32":
+                    if st.button("📂 폴더 열기", key="open_hearing_docs", use_container_width=True):
+                        import subprocess
+                        subprocess.Popen(f'explorer "{saved_folder}"')
 
         with col_excel:
             if st.button("📊 도청방문등록 엑셀 생성", use_container_width=True):
@@ -422,9 +424,11 @@ with tab_docs:
             saved_result_folder = st.session_state.get("_result_docs_folder")
             if saved_result_folder:
                 st.caption(f"📁 `{saved_result_folder}`")
-                if st.button("📂 폴더 열기", key="open_result_docs", use_container_width=True):
-                    import subprocess
-                    subprocess.Popen(f'explorer "{saved_result_folder}"')
+                import sys as _sys
+                if _sys.platform == "win32":
+                    if st.button("📂 폴더 열기", key="open_result_docs", use_container_width=True):
+                        import subprocess
+                        subprocess.Popen(f'explorer "{saved_result_folder}"')
 
         with col_result2:
             if st.button("💰 수당 지급내역 생성", use_container_width=True):

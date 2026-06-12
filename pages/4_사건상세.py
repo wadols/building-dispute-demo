@@ -441,8 +441,9 @@ with tab3:
                     f'폴더 경로: <code>{case_folder}</code></p>', unsafe_allow_html=True)
 
         if st.button("📂 탐색기에서 열기"):
-            import subprocess
-            subprocess.Popen(f'explorer "{case_folder}"')
+            import subprocess, sys as _sys
+            if _sys.platform == "win32":
+                subprocess.Popen(f'explorer "{case_folder}"')
 
 # ── 사이드바 빠른 이동
 st.sidebar.markdown("---")
