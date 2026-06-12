@@ -1,4 +1,4 @@
-"""
+﻿"""
 접수대장 — Notion-style 테이블 + 우측 사이드 패널
 행 클릭 → 사건 상세 패널 열림 / 문서 출력 · 엑셀 내보내기
 """
@@ -15,7 +15,6 @@ from core.ui_styles import inject_css, page_header, status_badge, case_folder_pa
 from core.hwpx_handler import generate_hwpx
 from core.excel_handler import generate_woopyeonmoa, generate_labeltek
 
-st.set_page_config(page_title="접수대장", page_icon="📂", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True
@@ -147,11 +146,18 @@ if df.empty:
 # ══════════════════════════════════════════════
 # 테이블 (전체 너비)
 # ══════════════════════════════════════════════
-st.markdown(
-    '<p style="font-size:12px;color:#94A3B8;margin-bottom:6px">'
-    '클릭으로 사건을 선택합니다  (다중 선택: Ctrl+클릭 또는 Shift+클릭)</p>',
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<style>
+[data-testid="stDataFrame"] [role="row"]:hover td { background: #EFF6FF !important; cursor: pointer; }
+[data-testid="stDataFrame"] [role="row"][aria-selected="true"] td { background: #DBEAFE !important; }
+</style>
+<div style="font-size:13px;color:#334155;margin-bottom:8px;padding:8px 12px;
+     background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;font-weight:500">
+  👆 <b>행을 클릭</b>하면 선택됩니다 &nbsp;|&nbsp;
+  ☑ 열 왼쪽 <b>체크박스</b>를 클릭해도 됩니다 &nbsp;|&nbsp;
+  다중: <b>Ctrl+클릭</b> 또는 <b>Shift+클릭</b>
+</div>
+""", unsafe_allow_html=True)
 
 SHOW_COLS = ["접수번호", "지역", "건물명", "신청인_성명", "피신청인_성명",
              "분쟁유형", "접수일자", "회신기한", "진행상태"]
@@ -159,26 +165,28 @@ df_disp = df[SHOW_COLS].copy()
 df_disp["진행상태"] = df_disp["진행상태"].map(lambda s: f"{STATUS_EMOJI.get(s,'•')} {s}")
 df_disp = df_disp.reset_index(drop=True)
 
+# 먼저 임시로 이벤트 받아서 선택 상태 파악
+_tbl_key = f"case_table_{st.session_state.get('_tbl_key', 0)}"
 tbl_event = st.dataframe(
     df_disp,
     use_container_width=True,
     hide_index=True,
-    height=min(46 + len(df_disp) * 30, 500),
-    row_height=30,
+    height=min(56 + len(df_disp) * 38, 560),
+    row_height=38,
     on_select="rerun",
     selection_mode="multi-row",
     column_config={
-        "접수번호":      st.column_config.TextColumn("접수번호",  width=88),
-        "지역":          st.column_config.TextColumn("지역",      width=62),
-        "건물명":        st.column_config.TextColumn("건물명",    width=100),
-        "신청인_성명":   st.column_config.TextColumn("신청인",    width=80),
-        "피신청인_성명": st.column_config.TextColumn("피신청인",  width=110),
+        "접수번호":      st.column_config.TextColumn("접수번호",  width=95),
+        "지역":          st.column_config.TextColumn("지역",      width=68),
+        "건물명":        st.column_config.TextColumn("건물명",    width=110),
+        "신청인_성명":   st.column_config.TextColumn("신청인",    width=85),
+        "피신청인_성명": st.column_config.TextColumn("피신청인",  width=120),
         "분쟁유형":      st.column_config.TextColumn("유형",      width=120),
-        "접수일자":      st.column_config.DateColumn("접수일자",  width=72, format="YY-MM-DD"),
-        "회신기한":      st.column_config.DateColumn("회신기한",  width=72, format="YY-MM-DD"),
-        "진행상태":      st.column_config.TextColumn("상태",      width=76),
+        "접수일자":      st.column_config.DateColumn("접수일자",  width=78, format="YY-MM-DD"),
+        "회신기한":      st.column_config.DateColumn("회신기한",  width=78, format="YY-MM-DD"),
+        "진행상태":      st.column_config.TextColumn("상태",      width=82),
     },
-    key=f"case_table_{st.session_state.get('_tbl_key', 0)}",
+    key=_tbl_key,
 )
 
 sel_indices = tbl_event.selection.rows if tbl_event and tbl_event.selection else []

@@ -1,4 +1,4 @@
-"""
+﻿"""
 위원관리 — 위원 등록·수정·삭제
 """
 import streamlit as st
@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.db import init_db, get_all_members, create_member, update_member, delete_member, get_member
 from core.ui_styles import inject_css, page_header
 
-st.set_page_config(page_title="위원관리", page_icon="👥", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

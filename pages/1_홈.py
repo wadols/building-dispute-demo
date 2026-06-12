@@ -1,4 +1,4 @@
-"""
+﻿"""
 홈 대시보드 — KPI · 월별 추이 · 분쟁유형 · 회신 임박 알림
 """
 import streamlit as st
@@ -14,7 +14,6 @@ from core.db import (
 from core.status_resolver import resolve_status, STATUS_COLORS, CLOSED_STATUSES
 from core.ui_styles import inject_css, page_header, status_badge, kpi_card_html
 
-st.set_page_config(page_title="홈", page_icon="🏠", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

@@ -1,4 +1,4 @@
-"""
+﻿"""
 사건 상세 화면
 - 탭1: 사건 정보 (전체 필드 조회, 수정 이동)
 - 탭2: 메모/일지 (CRUD — 추가/수정/삭제 확인)
@@ -18,7 +18,6 @@ from core.db import (
 from core.status_resolver import resolve_status, CLOSED_STATUSES
 from core.ui_styles import inject_css, page_header, status_badge, section_header, case_folder_path
 
-st.set_page_config(page_title="사건 상세", page_icon="🔎", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True

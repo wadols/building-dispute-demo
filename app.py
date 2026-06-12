@@ -11,8 +11,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 전체 페이지 등록 (switch_page 작동에 필요)
-# 사건상세는 등록하되 CSS로 사이드바에서 숨김
 pg = st.navigation(
     [
         st.Page("pages/1_홈.py",             title="홈",         icon="🏠"),
@@ -28,7 +26,6 @@ pg = st.navigation(
     position="sidebar",
 )
 
-# 사이드바에서 "사건상세"(4번째 항목) 숨김 — 접수대장에서 진입하는 내부 페이지
 st.markdown("""
 <style>
 [data-testid="stSidebarNavItems"] > li:nth-child(4),
@@ -38,6 +35,13 @@ st.markdown("""
 
 if "db_initialized" not in st.session_state:
     init_db()
+    from core.db import get_all_cases
+    if len(get_all_cases()) == 0:
+        try:
+            from seed_demo_data import reset_and_seed
+            reset_and_seed()
+        except Exception:
+            pass
     st.session_state["db_initialized"] = True
 
 pg.run()

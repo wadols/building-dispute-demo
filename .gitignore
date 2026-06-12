@@ -1,0 +1,16 @@
+# 데이터베이스 (로컬 전용)
+data/cases.db
+
+# Streamlit secrets (보안)
+.streamlit/secrets.toml
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+
+# 출력 파일
+output/
+
+# 환경 설정
+.env

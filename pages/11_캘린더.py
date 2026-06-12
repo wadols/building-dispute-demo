@@ -1,4 +1,4 @@
-"""
+﻿"""
 처리기한 캘린더 — 회신기한(파랑) · 법정처리기한 D+60(빨강) 월간 뷰
 """
 import streamlit as st
@@ -13,7 +13,6 @@ from core.db import init_db, get_all_cases, get_all_hearings
 from core.status_resolver import resolve_status, CLOSED_STATUSES
 from core.ui_styles import inject_css, page_header
 
-st.set_page_config(page_title="캘린더", page_icon="📅", layout="wide")
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state["db_initialized"] = True
