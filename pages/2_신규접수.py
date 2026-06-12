@@ -140,10 +140,26 @@ with tab_single:
                 st.info(f"직접 입력 필요: {', '.join(_pdf_msg['skipped'])}")
             if _pdf_msg.get("error"):
                 st.error(_pdf_msg["error"])
+            if _pdf_msg.get("debug"):
+                with st.expander("라이브러리 진단 정보"):
+                    for line in _pdf_msg["debug"]:
+                        st.markdown(line)
             if _pdf_msg.get("raw"):
                 with st.expander("추출 원문 확인 (파싱이 안 될 때 참고)"):
                     st.text(_pdf_msg["raw"][:3000])
 
+        # 환경 진단 (임시)
+        import sys as _sys
+        _env_lines = [f"Python: `{_sys.executable}`"]
+        try:
+            import fitz as _fitz; _env_lines.append(f"PyMuPDF: ✅ {_fitz.__version__}")
+        except ImportError: _env_lines.append("PyMuPDF: ❌ 미설치")
+        try:
+            import pdfplumber as _pp; _env_lines.append("pdfplumber: ✅")
+        except ImportError: _env_lines.append("pdfplumber: ❌ 미설치")
+        with st.expander("🔧 환경 진단"):
+            for l in _env_lines: st.markdown(l)
+        st.caption("⚠️ **경기도 홈페이지 안내 페이지 PDF가 아닌**, 신청인이 작성·제출한 신청서 PDF를 업로드하세요. (파일명 예: 붙임1) 집합건물 분쟁조정 신청서.pdf)")
         pdf_file = st.file_uploader(
             "신청서 PDF 업로드 (집합건물 분쟁조정 신청서)",
             type=["pdf"], key="pdf_upload",
@@ -199,6 +215,7 @@ with tab_single:
 
                         if not raw_text.strip():
                             msg["error"] = "PDF에서 텍스트를 읽지 못했습니다. 스캔 이미지 PDF이거나 보안이 걸린 파일일 수 있습니다."
+                            msg["debug"] = parsed.get("_debug", [])
                         elif not filled:
                             msg["error"] = "텍스트는 읽었으나 항목을 추출하지 못했습니다. '추출 원문 확인'으로 내용을 확인하세요."
                         msg["filled"] = filled

@@ -5,21 +5,24 @@ import re
 import io
 
 
-def _extract_text(file_bytes: bytes) -> str:
-    """pymupdf → pdfplumber → pypdfium2 → pdfminer → OCR 순서로 시도"""
+def _extract_text(file_bytes: bytes) -> tuple[str, list[str]]:
+    """pymupdf → pdfplumber → pdfminer → OCR 순서로 시도. (text, debug_messages) 반환"""
+    debug = []
 
     # 1. pymupdf (fitz) — 가장 범용적
     try:
         import fitz
         doc = fitz.open(stream=file_bytes, filetype="pdf")
-        parts = []
-        for page in doc:
-            parts.append(page.get_text())
+        parts = [page.get_text() for page in doc]
         text = "\n".join(parts)
         if text.strip():
-            return text
-    except Exception:
-        pass
+            debug.append("✅ PyMuPDF로 텍스트 추출 성공")
+            return text, debug
+        debug.append("⚠️ PyMuPDF: 라이브러리 정상이나 텍스트 없음 (이미지 PDF일 수 있음)")
+    except ImportError:
+        debug.append("❌ PyMuPDF 미설치 (pip install PyMuPDF)")
+    except Exception as e:
+        debug.append(f"❌ PyMuPDF 오류: {e}")
 
     # 2. pdfplumber
     try:
@@ -31,34 +34,28 @@ def _extract_text(file_bytes: bytes) -> str:
                 parts.append(t)
         text = "\n".join(parts)
         if text.strip():
-            return text
-    except Exception:
-        pass
+            debug.append("✅ pdfplumber로 텍스트 추출 성공")
+            return text, debug
+        debug.append("⚠️ pdfplumber: 라이브러리 정상이나 텍스트 없음")
+    except ImportError:
+        debug.append("❌ pdfplumber 미설치 (pip install pdfplumber)")
+    except Exception as e:
+        debug.append(f"❌ pdfplumber 오류: {e}")
 
-    # 3. pypdfium2
-    try:
-        import pypdfium2 as pdfium
-        doc = pdfium.PdfDocument(bytes(file_bytes))
-        parts = []
-        for page in doc:
-            tp = page.get_textpage()
-            parts.append(tp.get_text_range())
-        text = "\n".join(parts)
-        if text.strip():
-            return text
-    except Exception:
-        pass
-
-    # 4. pdfminer.six
+    # 3. pdfminer.six
     try:
         from pdfminer.high_level import extract_text as _pm_extract
         text = _pm_extract(io.BytesIO(file_bytes))
         if text.strip():
-            return text
-    except Exception:
-        pass
+            debug.append("✅ pdfminer.six로 텍스트 추출 성공")
+            return text, debug
+        debug.append("⚠️ pdfminer: 라이브러리 정상이나 텍스트 없음")
+    except ImportError:
+        debug.append("❌ pdfminer.six 미설치 (pip install pdfminer.six)")
+    except Exception as e:
+        debug.append(f"❌ pdfminer 오류: {e}")
 
-    # 5. OCR (스캔 이미지 PDF) — pymupdf로 이미지 변환 후 easyocr
+    # 4. OCR (스캔 이미지 PDF) — pymupdf로 이미지 변환 후 easyocr
     try:
         import fitz
         import easyocr
@@ -68,20 +65,22 @@ def _extract_text(file_bytes: bytes) -> str:
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         parts = []
         for page in doc:
-            mat = fitz.Matrix(2, 2)  # 2배 해상도
+            mat = fitz.Matrix(2, 2)
             pix = page.get_pixmap(matrix=mat)
             img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
             result = reader.readtext(img, detail=0, paragraph=True)
             parts.append("\n".join(result))
         text = "\n".join(parts)
         if text.strip():
-            return text
+            debug.append("✅ EasyOCR로 텍스트 추출 성공")
+            return text, debug
+        debug.append("⚠️ EasyOCR: 실행됐으나 텍스트 없음")
     except ImportError:
-        pass  # easyocr 미설치
-    except Exception:
-        pass
+        debug.append("ℹ️ EasyOCR 미설치 (스캔 PDF는 pip install easyocr 필요)")
+    except Exception as e:
+        debug.append(f"❌ EasyOCR 오류: {e}")
 
-    return ""
+    return "", debug
 
 
 def _find_phone(text: str) -> str:
@@ -128,7 +127,7 @@ def parse_application_pdf(file_bytes: bytes) -> tuple[dict, str]:
     "_error" 키가 있으면 파싱 자체 실패
     """
     try:
-        raw_text = _extract_text(file_bytes)
+        raw_text, debug_msgs = _extract_text(file_bytes)
     except ImportError:
         raise
     except Exception as e:
@@ -224,6 +223,7 @@ def parse_application_pdf(file_bytes: bytes) -> tuple[dict, str]:
         content = " ".join(m.group(1).split()).strip()
         r["신청내용"] = content[:800] + ("..." if len(content) > 800 else "")
 
+    r["_debug"] = debug_msgs
     return r, raw_text
 
 
