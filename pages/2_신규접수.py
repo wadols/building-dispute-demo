@@ -141,12 +141,12 @@ with tab_single:
             if _pdf_msg.get("error"):
                 st.error(_pdf_msg["error"])
             if _pdf_msg.get("debug"):
-                with st.expander("라이브러리 진단 정보"):
-                    for line in _pdf_msg["debug"]:
-                        st.markdown(line)
+                for line in _pdf_msg["debug"]:
+                    st.caption(line)
             if _pdf_msg.get("raw"):
-                with st.expander("추출 원문 확인 (파싱이 안 될 때 참고)"):
-                    st.text(_pdf_msg["raw"][:3000])
+                st.text_area("추출 원문 확인 (파싱이 안 될 때 참고)",
+                             value=_pdf_msg["raw"][:3000], height=120,
+                             disabled=True, label_visibility="collapsed")
 
         st.caption("⚠️ **경기도 홈페이지 안내 페이지 PDF가 아닌**, 신청인이 작성·제출한 신청서 PDF를 업로드하세요. (파일명 예: 집합건물 분쟁조정 신청.pdf)")
         pdf_file = st.file_uploader(
